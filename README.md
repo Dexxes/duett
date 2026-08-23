@@ -1,13 +1,3 @@
-docker build -t duett .
-docker run -d \
-  --name duett \
-  -p 3003:3003 \
-  -v duett_data:/app/data \
-  -e BASE_PATH=/duett \
-  -e OVERVIEW_PASSWORD=geheim \
-  --restart unless-stopped \
-  duett
-
 # Duett – Stream-Kommentar-Webinterface
 
 Webinterface für gemeinsames Kommentieren mit Zeitstempel: ARD-Mediathek-/
