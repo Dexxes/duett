@@ -1,3 +1,4 @@
 node_modules
 NEXTCLOUD_PLAN.md
-data/
+data
+.vscode
