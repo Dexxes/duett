@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<base href="__BASE_HREF__">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Duett – Übersicht</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <div class="site-header-titles">
+        <h1><a href="." class="logo-link">Duett</a></h1>
+        <p class="subtitle">Übersicht aller Sessions</p>
+      </div>
+    </header>
+
+    <section id="overview-gate-card" class="card">
+      <h2>Passwort erforderlich</h2>
+      <p class="field-hint">Diese Übersichtsseite ist mit einem separaten, betreiberseitig gesetzten Passwort geschützt (Docker-Variable <code>OVERVIEW_PASSWORD</code>).</p>
+      <form id="overview-auth-form">
+        <input type="password" id="overview-password-input" required placeholder="Passwort" autocomplete="current-password">
+        <button type="submit">Entsperren</button>
+      </form>
+      <p id="overview-auth-error" class="error hidden"></p>
+    </section>
+
+    <section id="overview-list-card" class="card hidden">
+      <h2>Alle Sessions</h2>
+      <div id="overview-list" class="stream-list">
+        <p class="empty-state">Lade …</p>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

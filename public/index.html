@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<base href="__BASE_HREF__">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Duett – Stream-Kommentare</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="page page-narrow hero-page">
+    <header class="site-header hero-header">
+      <h1 class="hero-title">Duett</h1>
+      <p class="subtitle hero-subtitle">Kommentiert Videos, Musik und Reels gemeinsam – mit Zeitstempel, ganz ohne Login.</p>
+    </header>
+
+    <section class="card wizard-card">
+      <div class="wizard-progress" id="wizard-progress" aria-hidden="true">
+        <span class="wizard-progress-step active" data-step="1"><span class="wizard-progress-dot">1</span><span class="wizard-progress-label">Titel</span></span>
+        <span class="wizard-progress-line"></span>
+        <span class="wizard-progress-step" data-step="2"><span class="wizard-progress-dot">2</span><span class="wizard-progress-label">Quelle</span></span>
+        <span class="wizard-progress-line"></span>
+        <span class="wizard-progress-step" data-step="3"><span class="wizard-progress-dot">3</span><span class="wizard-progress-label">Details</span></span>
+      </div>
+
+      <form id="create-form">
+        <div class="wizard-step active" data-step="1">
+          <h2 class="wizard-step-title">Wie soll deine Session heißen?</h2>
+          <p class="wizard-step-hint">Der Titel ist für alle sichtbar, die den Link später öffnen.</p>
+          <input type="text" id="title" name="title" maxlength="200" placeholder="z. B. Bandprobe 12.07." autofocus>
+          <div class="wizard-actions">
+            <span></span>
+            <button type="button" class="wizard-next" data-goto="2">Weiter →</button>
+          </div>
+        </div>
+
+        <div class="wizard-step" data-step="2">
+          <h2 class="wizard-step-title">Erste Quelle hinzufügen</h2>
+          <p class="wizard-step-hint">Optional – ein ARD-Mediathek-, ZDF-/m3u8-Link, Spotify, YouTube, TikTok oder Instagram. Du kannst das auch später jederzeit auf der Session-Seite nachholen.</p>
+          <input type="text" id="mix_source_url" maxlength="2000" placeholder="Link einfügen (oder einfach leer lassen) …">
+          <p class="field-hint premium-hint">🎧 Volle Wiedergabe von Spotify-Inhalten erfordert Spotify Premium und Login im selben Browser – sonst nur eine kurze Vorschau. Alle anderen Quellen spielen immer vollständig.</p>
+          <span id="mix-resolve-status" class="resolve-status hidden"></span>
+          <div class="wizard-actions">
+            <button type="button" class="wizard-back secondary" data-goto="1">← Zurück</button>
+            <button type="button" class="wizard-next" data-goto="3">Weiter →</button>
+          </div>
+        </div>
+
+        <div class="wizard-step" data-step="3">
+          <h2 class="wizard-step-title">Noch ein paar Details</h2>
+          <p class="wizard-step-hint">Beides optional – lässt sich für das Passwort auch später über den Admin-Link ändern.</p>
+
+          <label for="slug">Kurzlink</label>
+          <input type="text" id="slug" name="slug" maxlength="40" placeholder="z. B. bandprobe-12-07 – leer lassen für zufällig">
+          <p class="field-hint">Wird Teil der Stream-URL (.../s/dein-kurzlink). Nur Kleinbuchstaben, Zahlen und Bindestriche, 3–40 Zeichen.</p>
+
+          <label for="session_password">Passwort für diese Session</label>
+          <input type="password" id="session_password" name="session_password" maxlength="200" placeholder="Leer lassen für offenen Zugriff" autocomplete="new-password">
+          <p class="field-hint">Schützt Ansicht und Kommentare zusätzlich zum Share-Link.</p>
+
+          <div class="wizard-actions">
+            <button type="button" class="wizard-back secondary" data-goto="2">← Zurück</button>
+            <button type="submit" id="create-submit-btn">Session anlegen ✓</button>
+          </div>
+        </div>
+      </form>
+      <p id="create-error" class="error hidden"></p>
+    </section>
+
+    <section id="result" class="card hidden">
+      <h2>Session angelegt 🎉</h2>
+      <p>Diesen Link zum gemeinsamen Kommentieren teilen:</p>
+      <div class="link-row">
+        <input type="text" id="share-link" readonly>
+        <button type="button" data-copy="#share-link">Kopieren</button>
+      </div>
+
+      <p>Admin-Link (zum Löschen von Kommentaren/Items/Session – nicht teilen!):</p>
+      <div class="link-row">
+        <input type="text" id="admin-link" readonly>
+        <button type="button" data-copy="#admin-link">Kopieren</button>
+      </div>
+
+      <p id="result-item-note" class="field-hint hidden"></p>
+
+      <a id="open-link" class="button-link" href="#">Stream öffnen →</a>
+      <button type="button" id="create-another-btn" class="secondary wizard-restart">Weitere Session anlegen</button>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

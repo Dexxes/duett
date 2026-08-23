@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<base href="__BASE_HREF__">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Duett – Stream</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-stream-id="">
+  <div class="page page-wide">
+    <header class="site-header">
+      <div class="site-header-titles">
+        <h1><a href="." class="logo-link">Duett</a></h1>
+        <h2 id="stream-title">Lade Stream …</h2>
+      </div>
+      <div class="name-indicator">
+        Du kommentierst als <strong id="current-name-display">–</strong>
+        <button type="button" id="change-name-btn" class="link-btn">ändern</button>
+      </div>
+    </header>
+
+    <div id="admin-banner" class="admin-banner hidden">
+      Admin-Modus aktiv – du kannst Kommentare und diesen Stream löschen.
+      <button type="button" id="delete-stream-btn" class="danger">Stream löschen</button>
+    </div>
+
+    <section id="admin-password-card" class="card hidden">
+      <h2>Zugriffsschutz</h2>
+      <p id="admin-password-status" class="field-hint"></p>
+      <form id="admin-password-form">
+        <label for="admin-password-input">Neues Passwort setzen (leer lassen zum Entfernen)</label>
+        <input type="password" id="admin-password-input" placeholder="Passwort" maxlength="200" autocomplete="new-password">
+        <div class="form-actions">
+          <button type="submit">Speichern</button>
+        </div>
+      </form>
+      <p id="admin-password-error" class="error hidden"></p>
+    </section>
+
+    <p id="load-error" class="error hidden"></p>
+
+    <div class="theater-container">
+      <div class="theater-player">
+        <div class="player-wrap">
+          <div class="video-frame">
+            <video id="video" controls playsinline controlsList="nofullscreen"></video>
+            <div class="bubble-overlay" id="bubble-overlay"></div>
+          </div>
+          <div class="marker-bar" id="marker-bar"></div>
+          <div class="seek-buttons">
+            <button type="button" class="seek-btn" data-seek="-30">−30s</button>
+            <button type="button" class="seek-btn" data-seek="-5">−5s</button>
+            <button type="button" class="seek-btn" data-seek="-1">−1s</button>
+            <button type="button" class="seek-btn play-pause-btn" id="play-pause-btn" aria-label="Abspielen">▶</button>
+            <button type="button" class="seek-btn" data-seek="1">+1s</button>
+            <button type="button" class="seek-btn" data-seek="5">+5s</button>
+            <button type="button" class="seek-btn" data-seek="30">+30s</button>
+            <button type="button" class="seek-btn" id="next-comment-btn">⏭ Nächster Kommentar</button>
+            <div class="jump-to">
+              <input type="text" id="jump-input" placeholder="Timecode">
+              <button type="button" id="jump-btn">Springen</button>
+            </div>
+            <div class="fullscreen-comment-bar">
+              <span id="fs-reply-badge" class="fs-reply-badge hidden">
+                <span class="fs-reply-badge-label">ANTWORT</span>
+                <span id="fs-reply-author"></span>
+                <button type="button" id="fs-reply-cancel" class="fs-reply-cancel" aria-label="Antwort abbrechen">×</button>
+              </span>
+              <input type="text" id="fs-comment-input" placeholder="Kommentar an aktueller Stelle …" maxlength="2000">
+              <button type="button" class="seek-btn" id="fs-comment-submit">Senden</button>
+            </div>
+            <button type="button" class="seek-btn" id="fullscreen-btn" aria-label="Vollbild">⛶</button>
+          </div>
+        </div>
+
+        <section class="card">
+          <button type="button" id="comment-here-btn">💬 Kommentar an aktueller Stelle</button>
+
+          <form id="comment-form" class="hidden">
+            <label for="comment-timecode">Zeitpunkt (Sek.)</label>
+            <input type="number" id="comment-timecode" min="0" step="0.1" required>
+
+            <label for="comment-body">Kommentar</label>
+            <textarea id="comment-body" maxlength="2000" rows="3" required placeholder="Was fällt dir hier auf?"></textarea>
+
+            <div class="form-actions">
+              <button type="submit">Absenden</button>
+              <button type="button" id="comment-cancel-btn" class="secondary">Abbrechen</button>
+            </div>
+          </form>
+          <p id="comment-error" class="error hidden"></p>
+        </section>
+
+        <section class="card">
+          <h2>Notizen</h2>
+          <p class="field-hint">Für alle mit Zugriff auf diesen Stream sichtbar und bearbeitbar – wird automatisch gespeichert. Jede Zeile erscheint in der Farbe der Person, die sie zuletzt bearbeitet hat.</p>
+          <div class="notes-field">
+            <div id="notes-view" class="notes-view"></div>
+            <textarea id="notes-textarea" rows="4" placeholder="Gemeinsame Notizen zu diesem Stream …" class="hidden"></textarea>
+          </div>
+        </section>
+      </div>
+
+      <div class="theater-side">
+        <section class="card comment-section-card">
+          <div class="comment-list-header">
+            <h2>Kommentare</h2>
+            <div id="read-filter" class="read-filter" role="group" aria-label="Nach Gelesen-Status filtern">
+              <button type="button" class="read-filter-option" data-value="all">Alle</button>
+              <button type="button" class="read-filter-option" data-value="unread">Ungelesen</button>
+              <button type="button" class="read-filter-option" data-value="read">Gelesen</button>
+            </div>
+            <label class="sort-switch">
+              <span class="sort-switch-option" data-value="asc">Früh im Video zuerst</span>
+              <span class="sort-switch-track">
+                <input type="checkbox" id="sort-toggle" class="sort-switch-input">
+                <span class="sort-switch-thumb"></span>
+              </span>
+              <span class="sort-switch-option" data-value="desc">Spät im Video zuerst</span>
+            </label>
+          </div>
+          <div id="comment-list" class="comment-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="name-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2>Wie sollen wir dich nennen?</h2>
+      <p>Dein Name wird nur in diesem Browser gespeichert und bei deinen Kommentaren angezeigt.</p>
+      <form id="name-modal-form">
+        <input type="text" id="name-modal-input" maxlength="60" required placeholder="Dein Name">
+        <p class="field-hint">Deine Farbe (wird anderen angezeigt)</p>
+        <div id="color-swatches" class="color-swatches" role="radiogroup" aria-label="Deine Farbe"></div>
+        <button type="submit">Los geht's</button>
+      </form>
+      <button type="button" id="name-modal-skip" class="link-btn">Erstmal nur zuschauen</button>
+    </div>
+  </div>
+
+  <div id="password-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2>Passwort erforderlich</h2>
+      <p>Diese Session ist passwortgeschützt. Bitte gib das Passwort ein, um sie anzusehen.</p>
+      <form id="password-modal-form">
+        <input type="password" id="password-modal-input" required placeholder="Passwort" autocomplete="current-password">
+        <button type="submit">Entsperren</button>
+      </form>
+      <p id="password-modal-error" class="error hidden"></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

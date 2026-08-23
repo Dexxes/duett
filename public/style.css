@@ -1,0 +1,2403 @@
+:root {
+  --bg: #0f1115;
+  --surface: #1a1d24;
+  --surface-alt: #22262f;
+  --border: #2c313c;
+  --text: #e7e9ee;
+  --text-muted: #9aa1ad;
+  --accent: #5b8def;
+  --accent-hover: #7aa4f2;
+  --danger: #e0555f;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+
+.page-narrow {
+  max-width: 560px;
+}
+
+.page-wide {
+  max-width: 1900px;
+}
+
+.site-header {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+
+.site-header-titles {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.site-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.logo-link {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.site-header .subtitle {
+  color: var(--text-muted);
+  margin: 0;
+}
+
+#stream-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  margin-top: 0;
+  font-size: 17px;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 12px 0 4px;
+}
+
+input[type="text"],
+input[type="url"],
+input[type="number"],
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--accent);
+  color: white;
+  transition: background 0.15s;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+button.secondary {
+  background: var(--surface-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.danger, .danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+button.danger:hover {
+  background: rgba(224, 85, 95, 0.1);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.link-btn:hover {
+  background: none;
+  color: var(--text);
+}
+
+.link-btn.danger {
+  color: var(--danger);
+  text-decoration: none;
+  border: none;
+}
+
+/* Read-Toggle bei eigenen Kommentaren (siehe buildReadToggleButton in
+   app.js): nur noch Status-Anzeige, keine anklickbare Aktion mehr. */
+.link-btn:disabled {
+  text-decoration: none;
+  cursor: default;
+  opacity: 0.75;
+}
+
+form { margin-top: 8px; }
+
+.form-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.hidden { display: none !important; }
+
+.error {
+  color: var(--danger);
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.error-text {
+  color: var(--danger) !important;
+}
+
+.field-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.link-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.link-row input {
+  flex: 1;
+}
+
+.button-link {
+  display: inline-block;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.admin-banner {
+  background: rgba(91, 141, 239, 0.12);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ---------- ARD-Link auflösen ---------- */
+
+.ard-resolve-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.resolve-status {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---------- Stream-Liste (Startseite) ---------- */
+
+.stream-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stream-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.stream-list-item:last-child {
+  border-bottom: none;
+}
+
+.stream-list-item:hover .stream-list-title {
+  color: var(--accent);
+}
+
+.stream-list-title {
+  font-weight: 500;
+}
+
+.stream-list-date {
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* ---------- Zweispalten-Layout (Player links, Kommentare rechts) ---------- */
+/* Ab 900px Breite standardmäßig 50/50, darunter gestapelt. */
+
+.theater-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.theater-player {
+  min-width: 0;
+}
+
+.theater-side {
+  min-width: 0;
+}
+
+@media (min-width: 900px) {
+  .theater-container {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .theater-player,
+  .theater-side {
+    flex: 1 1 50%;
+  }
+
+  .theater-side {
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+  }
+}
+
+.player-wrap {
+  margin-bottom: 20px;
+}
+
+div.player-wrap:fullscreen > div.card.mix-player-card {
+  padding: 0px;
+  border-radius: 0px;
+  border: 0px;
+  background-color: black;
+}
+
+.video-frame {
+  position: relative;
+}
+
+video {
+  width: 100%;
+  background: black;
+  display: block;
+}
+
+/* ---------- Vollbild ---------- */
+/* .player-wrap (statt des nackten <video>) geht fullscreen, damit die
+   Sprechblasen (siehe unten) als eigenes DOM-Overlay sichtbar bleiben –
+   ein nativer Video-Fullscreen würde eigenes HTML-Overlay verdecken.
+   Wichtig: Jede Vendor-Variante braucht eine EIGENE Regel. Ein Browser,
+   der eine der kombinierten Pseudoklassen in einer Komma-Selektorliste
+   nicht kennt (z. B. Firefox bei :-webkit-full-screen), verwirft sonst
+   die GESAMTE Regel – auch den Teil, den er eigentlich unterstützt. */
+
+.player-wrap:fullscreen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: black;
+  padding: 12px;
+}
+
+.player-wrap:-webkit-full-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: black;
+  padding: 12px;
+}
+
+.player-wrap:-moz-full-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: black;
+  padding: 12px;
+}
+
+.player-wrap:fullscreen video {
+  max-height: 110%;
+}
+
+.player-wrap:-webkit-full-screen video {
+  max-height: 110%;
+}
+
+.player-wrap:-moz-full-screen video {
+  max-height: 110%;
+}
+
+/* Marker-Leiste und Timecode-Sprung-Feld sind im Vollbild überflüssig
+   (Sprechblasen ersetzen die Marker-Übersicht, Springen macht wenig Sinn,
+   wenn man gerade konzentriert zuschaut) – dort ausgeblendet. */
+
+.player-wrap:fullscreen .marker-bar,
+.player-wrap:fullscreen .jump-to {
+  display: none;
+}
+
+.jump-to button{
+  background: var(--surface-alt);
+}
+
+.player-wrap:-webkit-full-screen .marker-bar,
+.player-wrap:-webkit-full-screen .jump-to {
+  display: none;
+}
+
+.player-wrap:-moz-full-screen .marker-bar,
+.player-wrap:-moz-full-screen .jump-to {
+  display: none;
+}
+
+/* Bei ARD-/Video-Items zeigt das eigene <video>-Element im Vollbildmodus
+   schon alles Nötige – der "Now playing"-Kopfbereich (Cover/Titel/Interpret)
+   darüber ist dort überflüssig und wird ausgeblendet. Bei anderen Providern
+   (Spotify/YouTube/TikTok) bleibt er sichtbar, da deren Embeds im
+   Theater-/Vollbildmodus keinen eigenen Titel zeigen. data-provider wird in
+   showEmbedFor() (app.js) auf .player-wrap gespiegelt. */
+.player-wrap:fullscreen[data-provider="ard"] .mix-now-playing {
+  display: none;
+}
+
+.player-wrap:-webkit-full-screen[data-provider="ard"] .mix-now-playing {
+  display: none;
+}
+
+.player-wrap:-moz-full-screen[data-provider="ard"] .mix-now-playing {
+  display: none;
+}
+
+/* ---------- Sprechblasen-Overlay (nur im Vollbild sichtbar) ---------- */
+/* Verankert am .video-frame (nicht am ganzen .player-wrap), damit die
+   Blasen unten am Video enden – also direkt oberhalb der Marker-Bar,
+   die als nächstes Geschwisterelement direkt danach folgt. Rechtsbündig. */
+
+.bubble-overlay {
+  position: absolute;
+  right: 16px;
+  bottom: 8px;
+  max-width: min(60%, 380px);
+  display: none;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.player-wrap:fullscreen .bubble-overlay {
+  display: flex;
+}
+
+.player-wrap:-webkit-full-screen .bubble-overlay {
+  display: flex;
+}
+
+.player-wrap:-moz-full-screen .bubble-overlay {
+  display: flex;
+}
+
+.comment-bubble {
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--bubble-color, var(--accent));
+  border-left: 4px solid var(--bubble-color, var(--accent));
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 17px;
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.comment-bubble.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.comment-bubble.hide {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.comment-bubble-author {
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 3px;
+}
+
+.comment-bubble-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-bubble-reply-btn {
+  display: block;
+  margin-top: 4px;
+  padding: 0;
+  pointer-events: auto;
+}
+
+/* ---------- Fullscreen: Antwort-Badge in der Kommentarleiste ---------- */
+
+.fs-reply-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(91, 141, 239, 0.16);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 4px 6px 4px 10px;
+  font-size: 12px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.fs-reply-badge-label {
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+}
+
+.fs-reply-cancel {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.fs-reply-cancel:hover {
+  background: none;
+  color: var(--text);
+}
+
+/* ---------- Nicht-Vollbild: Hervorhebung beim Erreichen des Timecodes ---------- */
+/* Hintergrundfarbe (in die jeweilige normale Kartenfarbe eingemischt, damit
+   der Text lesbar bleibt) statt nur Rahmen/Schatten. */
+
+.comment.timecode-highlight {
+  background-color: color-mix(in srgb, var(--highlight-color, var(--accent)) 22%, var(--surface));
+  border-color: var(--highlight-color, var(--accent));
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.reply.timecode-highlight {
+  background-color: color-mix(in srgb, var(--highlight-color, var(--accent)) 22%, var(--surface-alt));
+  border-color: var(--highlight-color, var(--accent));
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Content-Mix: gleiche Hervorhebung auch für Playlist-Einträge, z. B. wenn
+   von einem Medien-Link in einem Kommentar dorthin gesprungen wird. */
+.playlist-item.timecode-highlight {
+  background-color: color-mix(in srgb, var(--highlight-color, var(--accent)) 22%, var(--surface-alt));
+  transition: background-color 0.3s ease;
+}
+
+/* Content-Mix: dauerhafte Umrandung für Kommentare, die zum gerade aktiven
+   Playlist-Item gehören (siehe highlightActiveItemComments in app.js) –
+   bewusst ein Rahmen statt einer Hintergrundfarbe, damit sich das nicht mit
+   der nur kurz aufblitzenden .timecode-highlight-Markierung beißt. */
+.comment.active-item-comment {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.marker-bar {
+  position: relative;
+  height: 18px;
+  margin-top: 6px;
+  background: var(--surface-alt);
+  border-radius: 4px;
+}
+
+.marker-bar::before {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  left: var(--playhead, 0%);
+  width: 2px;
+  background: var(--text-muted);
+}
+
+.marker {
+  position: absolute;
+  top: 2px;
+  width: 10px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--accent);
+  border: none;
+  transform: translateX(-50%);
+  padding: 0;
+}
+
+.seek-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  justify-content: center;
+}
+
+.seek-btn {
+  background: var(--surface-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  min-width: 52px;
+}
+
+.seek-btn:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.play-pause-btn {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  min-width: 44px;
+  font-size: 15px;
+}
+
+.play-pause-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Im Vollbild fällt das helle Blau zu stark auf – dort dezenter. */
+
+.player-wrap:fullscreen .play-pause-btn {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.player-wrap:-webkit-full-screen .play-pause-btn {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.player-wrap:-moz-full-screen .play-pause-btn {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.player-wrap:fullscreen .play-pause-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.player-wrap:-webkit-full-screen .play-pause-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.player-wrap:-moz-full-screen .play-pause-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ---------- Transport-Panel: Gruppierungs-Wrapper ---------- */
+/* .transport-row/.advanced-panel/.step-group strukturieren die Steuerleiste
+   für die kompakte Mobil-Ansicht (siehe @media max-width:600px unten,
+   "Spotify embed Buttons"-Handoff). Auf breiteren Screens sollen sich Layout
+   und Reihenfolge der Buttons nicht ändern – dort lösen sich die Wrapper via
+   display:contents komplett auf, ihre Kinder bleiben normale Geschwister
+   innerhalb von .seek-buttons wie zuvor. Nur mobil-exklusive Controls
+   (Divider, "Mehr"-Button, Neustart-Button, mobiles Kommentar-Icon) sind hier
+   ausgeblendet und erscheinen erst in der Mobil-Media-Query. */
+.transport-row,
+.advanced-panel,
+.advanced-row,
+.step-group {
+  display: contents;
+}
+
+.transport-divider,
+.more-toggle,
+.restart-btn,
+.mobile-comment-btn,
+.mobile-scrubber {
+  display: none;
+}
+
+/* ---------- Spotify Transport Panel (aus "Spotify embed Buttons"-Handoff) ----------
+   Ursprünglich eine eigene transport-panel.css mit Nocturne-Design-System-
+   Variablen (--color-*/--space-*/--radius-*/--font-*) – hier vollständig in
+   style.css übernommen und direkt auf Duetts eigene Tokens gemappt statt ein
+   zweites Theme einzubinden. */
+
+.transport-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transport-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 3px;
+}
+
+/* Icon-only Buttons (vorheriges/nächstes Kapitel, Marker hinzufügen) */
+.icobtn {
+  position: relative;
+}
+.icobtn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Feste Sprung-Buttons (−5s/+5s) nutzen .seek-btn as-is */
+
+/* Play/Pause-Hauptbutton */
+.icobtn.btn-primary {
+  width: 44px;
+  height: 44px;
+}
+
+/* Einklappbarer erweiterter Bereich */
+.adv-panel {
+  overflow: hidden;
+  transition: max-height 0.18s ease, opacity 0.18s ease;
+}
+
+/* Gruppierte Button-Paare (−30s/−1s und +1s/+30s) */
+.step-group {
+  display: flex;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.step-btn {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 0;
+  cursor: pointer;
+}
+.step-btn:first-child {
+  border-right: 1px solid var(--border);
+}
+.step-btn:hover {
+  background: var(--surface-alt);
+}
+.step-btn:active {
+  background: var(--surface);
+}
+.step-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Scrubber */
+.track {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-alt);
+  cursor: pointer;
+}
+.track-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.track-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(91, 141, 239, 0.25);
+  transform: translate(-50%, -50%);
+}
+
+/* Timecode-Sprung-Input, jetzt Teil der Control-Leiste (.seek-buttons) */
+
+.jump-to {
+  display: flex;
+  gap: 8px;
+  flex: 1 1 160px;
+}
+
+.jump-to input {
+  flex: 1;
+  min-width: 0;
+}
+
+.jump-to button {
+  flex-shrink: 0;
+}
+
+/* ---------- Fullscreen-Kommentarleiste ---------- */
+/* Nur im Vollbild sichtbar, dann als Teil der Control-Leiste (.seek-buttons)
+   neben den Sprung-/Play-Buttons – im Fenstermodus existiert bereits der
+   "Kommentar an aktueller Stelle"-Button samt Formular unterhalb des
+   Players. */
+
+.fullscreen-comment-bar {
+  display: none;
+  gap: 8px;
+  flex: 1 1 220px;
+}
+
+.player-wrap:fullscreen .fullscreen-comment-bar {
+  display: flex;
+}
+
+.player-wrap:-webkit-full-screen .fullscreen-comment-bar {
+  display: flex;
+}
+
+.player-wrap:-moz-full-screen .fullscreen-comment-bar {
+  display: flex;
+}
+
+.fullscreen-comment-bar input {
+  flex: 1;
+  min-width: 0;
+}
+
+.fullscreen-comment-bar button {
+  flex-shrink: 0;
+}
+
+.name-indicator {
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  padding-top: 6px;
+}
+
+.name-indicator strong {
+  color: var(--text);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+}
+
+.modal-box h2 {
+  margin-top: 0;
+  font-size: 18px;
+}
+
+.modal-box p {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.modal-box form {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.modal-box input {
+  flex: 1;
+}
+
+.modal-box #name-modal-skip {
+  margin-top: 12px;
+}
+
+/* Name-Modal hat mehr Inhalt als die übrigen (einzeiligen) Modal-Formulare
+   (Passworteingabe etc.) – braucht deshalb eine Spalten- statt Zeilen-
+   Anordnung, während .modal-box form (Zeilenlayout) für die anderen erhalten
+   bleibt. */
+#name-modal-form {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* Schritt 1 (Name): Eingabe + "Weiter"-Button nebeneinander, wie die
+   übrigen einzeiligen Modal-Formulare. */
+#name-modal-step-name {
+  display: flex;
+  gap: 8px;
+}
+
+/* Schritt 2 (Farbe): erscheint nur, wenn der eingegebene Name in dieser
+   Session noch keiner bekannten Farbe zugeordnet werden konnte (siehe
+   findKnownColorForName in app.js) – sonst wird direkt übernommen und
+   dieser Schritt komplett übersprungen. */
+#name-modal-step-color {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+#name-modal-back-btn {
+  margin-top: 2px;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--swatch-color);
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.15s ease;
+}
+
+.color-swatch:hover {
+  /* .color-swatch ist ein <button> – ohne explizites background hier würde
+     die generische button:hover-Regel (blauer --accent-hover) greifen und
+     den Swatch fälschlich blau einfärben statt ihn in seiner echten Farbe
+     zu belassen. Als Hover-Feedback dient stattdessen nur die
+     Größenveränderung (transform). */
+  background: var(--swatch-color);
+  transform: scale(1.18);
+}
+
+.color-swatch.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--swatch-color);
+}
+
+/* Notizen: gleiche Optik wie das darunterliegende <textarea>, aber als
+   klickbare, zeilenweise eingefärbte Ansicht (siehe createNotesController
+   in app.js) – aktiv, solange das Textfeld nicht fokussiert ist. */
+.notes-field {
+  position: relative;
+}
+
+.notes-view {
+  width: 100%;
+  min-height: 88px;
+  padding: 10px 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.notes-view-empty {
+  color: var(--text-muted);
+}
+
+.notes-line {
+  color: var(--note-color, var(--text));
+}
+
+.notes-line:empty::before {
+  content: '\00a0';
+}
+
+#comment-here-btn {
+  width: 100%;
+}
+
+.comment-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  /* Bleibt beim Scrollen der Kommentarliste sichtbar (Sortierung/Filter
+     bleiben so immer erreichbar) – der eigentliche Scroll-Container ist
+     .theater-side (Desktop, siehe dortige Regel) bzw. bei gestapeltem
+     Layout die Seite selbst. Eigener Hintergrund + z-index, damit
+     darunterliegende Kommentare beim Scrollen nicht durchscheinen. */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--surface);
+}
+
+.comment-list-header h2 {
+  margin: 0;
+}
+
+.sort-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.sort-switch-option {
+  transition: color 0.15s;
+}
+
+.sort-switch-option.active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sort-switch-track {
+  position: relative;
+  width: 38px;
+  height: 21px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.sort-switch-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.sort-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent);
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+
+.sort-switch-input:checked ~ .sort-switch-thumb {
+  transform: translateX(17px);
+}
+
+.read-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.read-filter-option {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.read-filter-option:hover {
+  color: var(--text);
+}
+
+.read-filter-option.active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.comment, .reply {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.reply {
+  margin: 10px 0 0 20px;
+  background: var(--surface-alt);
+}
+
+/* Optimistisch eingefügter Kommentar/Antwort, noch nicht vom Server
+   bestätigt (siehe createOptimisticComment in app.js) – abgeblendet, Klicks
+   auf Aktionen (löschen/bearbeiten/Reaction/gelesen) sind währenddessen
+   gesperrt. */
+.comment.is-pending,
+.reply.is-pending {
+  opacity: 0.6;
+}
+
+.comment.is-pending .delete-btn,
+.comment.is-pending .edit-toggle,
+.comment.is-pending .reaction-add-wrap,
+.comment.is-pending .read-toggle,
+.reply.is-pending .delete-btn,
+.reply.is-pending .edit-toggle,
+.reply.is-pending .reaction-add-wrap,
+.reply.is-pending .read-toggle {
+  pointer-events: none;
+}
+
+.comment-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.timecode-link {
+  background: var(--surface-alt);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.author {
+  font-weight: 700;
+}
+
+.date {
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.edited-marker {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.comment-head .date {
+  margin-left: auto;
+}
+
+.comment-body {
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-body a {
+  color: var(--accent);
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.comment-body a:hover {
+  text-decoration: underline;
+}
+
+/* Content-Mix: Medien-Link in einem Kommentar, der zu einem Playlist-Item
+   aufgelöst wurde (siehe linkifyWithPlaylistRefs in app.js) – optisch von
+   normalen externen Links abgesetzt, da er statt einer neuen Seite die
+   Playlist-Leiste ansteuert. */
+.comment-body a.playlist-item-link {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+/* ---------- In Kommentare eingebettete Bilder (base64 in der DB, siehe
+   server.js/comments.image) ---------- */
+
+.comment-image-wrap {
+  margin-top: 8px;
+}
+
+.comment-image {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  cursor: zoom-in;
+}
+
+.image-attach {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.image-attach-label {
+  cursor: pointer;
+}
+
+.image-attach-preview-wrap {
+  max-width: 200px;
+}
+
+.image-attach-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 160px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.image-attach-error {
+  margin-top: 0;
+}
+
+.image-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1000;
+  cursor: zoom-out;
+}
+
+.image-lightbox-overlay img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+}
+
+.image-lightbox-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.image-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ---------- Reaction-Emojis auf Kommentare/Antworten ---------- */
+
+.reactions-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.reaction-pill:hover {
+  border-color: var(--accent);
+}
+
+.reaction-pill.mine {
+  border-color: var(--accent);
+  background: rgba(91, 141, 239, 0.15);
+}
+
+.reaction-count {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.reaction-pill.mine .reaction-count {
+  color: var(--accent);
+}
+
+.reaction-add-wrap {
+  position: relative;
+}
+
+/* Auf Geräten mit echtem Maus-Hover (Desktop) ist der "+"-Button zum
+   Hinzufügen einer Reaction erst sichtbar, wenn man über die Kommentar-/
+   Antwort-Karte hovert – reduziert visuelles Rauschen bei vielen
+   Kommentaren. Bereits gesetzte Reaction-Pills bleiben davon unberührt,
+   die sollen immer sichtbar sein. visibility statt display, damit sich am
+   Layout/Umbruch der Reactions-Zeile nichts verschiebt. :focus-within
+   sorgt dafür, dass der Button per Tastatur weiterhin erreichbar bleibt,
+   auch ohne Hover. Auf Touch-Geräten (kein echtes Hover) bleibt der Button
+   wie bisher dauerhaft sichtbar. */
+@media (hover: hover) and (pointer: fine) {
+  .reaction-add-wrap {
+    visibility: hidden;
+  }
+
+  .comment:hover .reaction-add-wrap,
+  .reply:hover .reaction-add-wrap,
+  .reaction-add-wrap:focus-within {
+    visibility: visible;
+  }
+}
+
+.reaction-add-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.reaction-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.reaction-picker {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  width: min(250px, calc(100vw - 24px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.reaction-picker.hidden {
+  display: none;
+}
+
+/* Wird per JS gesetzt (siehe keepPopoverInViewport in app.js), wenn der
+   Picker links ausgerichtet über den rechten Viewport-Rand hinausragen
+   würde – v. a. auf schmalen Screens, wenn der "+"-Button weit rechts in
+   einer umgebrochenen Reactions-Zeile sitzt. */
+.reaction-picker.align-right {
+  left: auto;
+  right: 0;
+}
+
+.reaction-picker-option {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.reaction-picker-option:hover {
+  background: var(--surface-alt);
+}
+
+/* ---------- Kommentar als gelesen markieren (rein lokal) ---------- */
+
+.read-toggle {
+  white-space: nowrap;
+}
+
+.comment.is-read,
+.reply.is-read {
+  opacity: 0.55;
+}
+
+.comment.is-read:hover,
+.reply.is-read:hover {
+  opacity: 0.85;
+}
+
+.reply-form,
+.edit-form {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reply-form button {
+  align-self: flex-start;
+}
+
+.edit-form .form-actions {
+  margin-top: 4px;
+}
+
+.empty-state {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ---------- Session-Typ-Auswahl (Startseite) ---------- */
+
+.type-switch {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.type-switch-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text);
+  margin: 0;
+  cursor: pointer;
+}
+
+.premium-hint {
+  color: var(--text-muted);
+}
+
+/* ---------- Content-Mix: Premium-Hinweis-Banner (Session-Seite) ---------- */
+
+.premium-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(29, 185, 84, 0.1);
+  border: 1px solid #1db954;
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.premium-banner-text {
+  flex: 1;
+}
+
+.premium-banner .link-btn {
+  color: #1db954;
+  margin-left: 4px;
+}
+
+.premium-banner-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.premium-banner-close:hover {
+  background: none;
+  color: var(--text);
+}
+
+/* ---------- Content-Mix: Player-Karte ---------- */
+
+.mix-now-playing {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* Spotifys IFrame-Embed ist cross-origin (open.spotify.com) – dessen
+   eigener Play/Pause-Button (data-testid="play-pause-button") lässt sich
+   deshalb NICHT direkt per CSS-Selektor ansprechen oder ausblenden (siehe
+   PLAN.md, Abschnitt Content-Mix). #play-pause-btn im eigenen Player-UI
+   soll aber laut Anforderung der einzige Play/Pause-Button sein. Als
+   praktikabler Workaround wird der Embed-Container auf die Höhe des oberen
+   Kopfbereichs (Cover + Titel/Interpret) begrenzt und der Rest per
+   overflow:hidden abgeschnitten – dadurch verschwindet die komplette
+   untere Steuerleiste (Zurück/Play-Pause/Weiter + Fortschrittsbalken) aus
+   dem sichtbaren Bereich, ohne dass wir Zugriff auf das Iframe-Innenleben
+   brauchen. Die Steuerung übernehmen vollständig unsere eigenen Buttons
+   (#play-pause-btn, #prev-item-btn, #next-item-btn) über die iFrame-API.
+   Der genaue Crop-Wert ist ein empirischer Näherungswert zur Spotify-
+   Embed-Höhe von 152px (siehe ensureSpotifyController in app.js) – sollte
+   Spotify das Layout ändern, ggf. anpassen. (War zuerst auf 68px, das hat
+   die Interpretenzeile abgeschnitten – auf 84px erhöht, damit Cover, Titel
+   UND Interpret komplett sichtbar sind, ohne die Steuerleiste freizulegen.) */
+#spotify-embed {
+  height: 152px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+#spotify-embed iframe {
+  display: block;
+  border-radius: 8px;
+}
+
+/* YouTube: fester 16:9-Rahmen statt einer fixen Pixelhöhe, damit das Video
+   bei jeder Breite im richtigen Seitenverhältnis erscheint. Das Iframe wird
+   von der YouTube-IFrame-API anstelle von #youtube-embed-target eingesetzt
+   (siehe ensureYouTubePlayer in app.js) und über diese Regel per CSS auf
+   100% des Wrappers gestreckt – die height/width-Optionen der API sind nur
+   ein Startwert. */
+#youtube-embed {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+#youtube-embed iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* YT Fullscreen button ausblenden */
+.player-controls-bottom .icon-button.fullscreen-icon{
+  display: none!important;
+}
+
+.now-playing-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--surface-alt);
+}
+
+.now-playing-meta {
+  min-width: 0;
+}
+
+.now-playing-title {
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.now-playing-artist {
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mix-embed {
+  margin-bottom: 10px;
+}
+
+/* TikTok Embed Player: vertikales Seitenverhältnis (9:16), anders als
+   Spotifys kompaktes Embed (s.o.) und YouTubes 16:9-Player – Höhe gedeckelt,
+   damit die Player-Karte nicht die ganze Bildschirmhöhe einnimmt. Der
+   Iframe wird bei jedem Item-Wechsel neu erzeugt (siehe loadTikTokItem in
+   app.js), da der TikTok Embed Player keine "lade neues Video"-Nachricht
+   kennt, sondern ein Video fest an seine URL bindet. */
+#tiktok-embed {
+  display: flex;
+  justify-content: center;
+}
+
+#tiktok-embed iframe {
+  width: 100%;
+  max-width: 325px;
+  aspect-ratio: 9 / 16;
+  max-height: 60vh;
+  border: 0;
+  border-radius: 8px;
+  display: block;
+}
+
+/* Instagram: embed.js baut das Blockquote selbst zu einem responsiven
+   Iframe um (siehe loadInstagramItem in app.js) und bestimmt die Höhe
+   je nach Caption-Länge selbst – wir zentrieren nur und deckeln die Höhe
+   nach oben, damit die Player-Karte nicht unbegrenzt wächst. */
+#instagram-embed {
+  display: flex;
+  justify-content: center;
+  max-height: 80vh;
+  overflow: auto;
+}
+
+#instagram-embed iframe {
+  border: 0;
+  border-radius: 8px;
+}
+
+.mix-pos-display {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-left: auto;
+  align-self: center;
+}
+
+/* ---------- Content-Mix: Playlist-Leiste ---------- */
+
+.playlist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 360px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 8px;
+  border-left: 4px solid transparent;
+  cursor: pointer;
+}
+
+.playlist-item:hover {
+  background: var(--surface-alt);
+}
+
+.playlist-item.active {
+  background: var(--surface-alt);
+  border-left-color: var(--accent);
+}
+
+.playlist-item-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--surface-alt);
+}
+
+.playlist-item-thumb-placeholder {
+  display: block;
+}
+
+.playlist-item-meta {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.playlist-item-title {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-item-artist {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-item-provider {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+.playlist-item-provider-link {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.playlist-item-remove {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.playlist-item-remove:hover {
+  background: rgba(224, 85, 95, 0.15);
+  color: var(--danger);
+}
+
+.add-item-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.add-item-form input {
+  flex: 1;
+}
+
+/* Spotifys Play-Button ausblenden */
+button[data-testid="play-pause-button"] {
+  display: none;
+}
+
+/* ========================================================= */
+/* Startseite: moderner Look + Schritt-für-Schritt-Assistent  */
+/* ========================================================= */
+
+.hero-page {
+  padding-top: 48px;
+}
+
+.hero-header {
+  display: block;
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.hero-title {
+  font-size: 42px;
+  font-weight: 800;
+  margin: 0 0 8px;
+  background: linear-gradient(135deg, var(--accent), #9b7dfa 55%, #57dbd0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.02em;
+}
+
+.hero-subtitle {
+  font-size: 15px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.wizard-card {
+  padding: 28px 24px 24px;
+}
+
+.wizard-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 24px;
+}
+
+.wizard-progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.wizard-progress-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.wizard-progress-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wizard-progress-step.active .wizard-progress-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.wizard-progress-step.active .wizard-progress-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.wizard-progress-step.done .wizard-progress-dot {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wizard-progress-line {
+  width: 32px;
+  height: 1px;
+  background: var(--border);
+  margin-bottom: 18px;
+  flex-shrink: 0;
+}
+
+.wizard-step {
+  display: none;
+}
+
+.wizard-step.active {
+  display: block;
+  animation: wizard-fade-in 0.2s ease;
+}
+
+@keyframes wizard-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.wizard-step-title {
+  margin: 0 0 4px;
+  font-size: 19px;
+}
+
+.wizard-step-hint {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.wizard-actions {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wizard-restart {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* ========================================================= */
+/* Session-Seite: Kommentar-Gruppierung nach Playlist-Item     */
+/* ========================================================= */
+
+.embed-frame {
+  position: relative;
+}
+
+/* Wiedergabegeschwindigkeit: oben rechts über dem Video/Embed. */
+.speed-select {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 11;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.speed-select.hidden {
+  display: none;
+}
+
+/* Emoji-Button + Flyout im Kommentar-Textfeld */
+.comment-body-wrap {
+  position: relative;
+}
+
+.comment-body-wrap textarea {
+  padding-right: 40px;
+  resize: vertical;
+}
+
+.emoji-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.emoji-btn:hover {
+  border-color: var(--accent);
+}
+
+.emoji-flyout {
+  position: absolute;
+  right: 8px;
+  bottom: 40px;
+  z-index: 20;
+  width: min(232px, calc(100vw - 56px));
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.emoji-flyout.hidden {
+  display: none;
+}
+
+.emoji-flyout-option {
+  border: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.emoji-flyout-option:hover {
+  background: var(--surface-alt);
+}
+
+/* @-Mention-Autocomplete für Playlist-Titel in Kommentaren (siehe
+   wireMentionAutocomplete in app.js). Wird per position: fixed direkt unter
+   der jeweils fokussierten Textarea eingeblendet, ein einziges Element wird
+   für alle Kommentar-Textareas wiederverwendet. */
+.mention-autocomplete {
+  position: fixed;
+  z-index: 30;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.mention-autocomplete.hidden {
+  display: none;
+}
+
+.mention-autocomplete-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mention-autocomplete-option:hover,
+.mention-autocomplete-option.active {
+  background: var(--surface-alt);
+}
+
+#ard-embed {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+#comment-here-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Solange ein "Nächster Kommentar"-Sprung noch nicht am Ziel angekommen ist
+   (siehe nextCommentPendingTarget in app.js), optisch als deaktiviert
+   kennzeichnen. */
+#next-comment-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.comment-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.comment-group-header:first-child {
+  margin-top: 0;
+}
+
+.comment-group-header:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.comment-group-header:disabled {
+  cursor: default;
+}
+
+.comment-group-icon {
+  flex-shrink: 0;
+}
+
+.comment-group-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comment-group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ========================================================= */
+/* Übersichtsseite (/overview)                                */
+/* ========================================================= */
+
+.stream-list-meta {
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+/* ========================================================= */
+/* Mobile: größere Tap-Flächen + Reflow der Player-Steuerung  */
+/* Nur unterhalb 600px aktiv, damit die kompakte Desktop-     */
+/* Optik/Dichte unverändert bleibt (siehe TODO #1/#2).        */
+/* ========================================================= */
+
+@media (max-width: 600px) {
+  /* ---- Touch-Ziele auf ~40px Kantenlänge/Padding bringen ---- */
+
+  .playlist-item-remove {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+
+  .emoji-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 17px;
+  }
+
+  .reaction-pill,
+  .reaction-add-btn {
+    padding: 7px 11px;
+    font-size: 14px;
+  }
+
+  .reaction-picker-option {
+    padding: 8px;
+    font-size: 20px;
+  }
+
+  .color-swatch {
+    width: 36px;
+    height: 36px;
+  }
+
+  .read-filter-option {
+    padding: 8px 6px;
+    font-size: 13px;
+  }
+
+  .link-btn {
+    padding: 8px 6px;
+  }
+
+  .fs-reply-cancel,
+  .premium-banner-close {
+    padding: 8px;
+    font-size: 18px;
+  }
+
+  .comment-group-header {
+    padding: 10px 12px;
+  }
+
+  .emoji-flyout-option {
+    padding: 8px;
+    font-size: 20px;
+  }
+
+  /* ---- Player-Steuerleiste: eigene Zeilen statt Gequetsche ---- */
+  /* Sprung-Feld, Fullscreen-Kommentarleiste und Positionsanzeige
+     bekommen auf schmalen Screens jeweils eine volle eigene Zeile,
+     statt sich zwischen den Icon-Buttons unschön aufzuteilen. */
+
+  .seek-buttons {
+    gap: 8px;
+  }
+
+  .seek-btn {
+    min-width: 44px;
+    padding: 9px 10px;
+  }
+
+  .jump-to,
+  .fullscreen-comment-bar {
+    flex-basis: 100%;
+  }
+
+  .mix-pos-display {
+    flex-basis: 100%;
+    margin-left: 0;
+    text-align: center;
+  }
+
+  /* ---------- Mobiles Transport-Panel ---------- */
+  /* Kompakte, hierarchische Steuerleiste statt des vollen Button-Rasters:
+     ein Scrubber, eine primäre Zeile (vorheriges Item, ±5s, groß & betont
+     Play/Pause, nächstes Item, Kommentar, "Mehr") plus ein einklappbarer
+     Bereich mit den selteneren Feinsteuerungen. Nach "Spotify embed
+     Buttons"-Handoff, mit Duetts eigenen Farb-/Radius-Tokens statt eines
+     fremden Theme-Imports. */
+
+  /* Größe/Farbe/Thumb der Leiste kommen von .track/.track-fill/.track-thumb
+     (transport-panel.css) – hier nur Duett-spezifische Platzierung/Touch. */
+  .mobile-scrubber {
+    display: block;
+    margin: 4px 6px 18px;
+    touch-action: none;
+  }
+
+  /* .marker-bar (Kommentar-Marker + Playhead-Linie) wird auf Mobile durch
+     den neuen Scrubber ersetzt statt beide übereinander zu zeigen – zwei
+     Leisten mit je eigenem Positions-Indikator direkt untereinander sahen
+     wie ein Rendering-Fehler aus (zwei verschiedenfarbige Punkte). */
+  .marker-bar {
+    display: none;
+  }
+
+  .mix-player-card {
+    padding: 14px;
+  }
+
+  .seek-buttons {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .transport-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+  }
+
+  .transport-row .seek-btn[data-seek] {
+    flex: 1 1 34px;
+    min-width: 34px;
+    padding: 9px 3px;
+    font-size: 12px;
+    border-radius: 16px;
+  }
+
+  .icon-btn {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    min-width: 0;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    border-radius: 50%;
+  }
+
+  .icon-btn:hover {
+    background: var(--surface);
+    border-color: var(--accent);
+  }
+
+  .play-pause-btn {
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    min-width: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
+    font-size: 16px;
+  }
+
+  .play-pause-btn:hover {
+    background: rgba(91, 141, 239, 0.14);
+  }
+
+  .mobile-comment-btn {
+    display: inline-flex;
+  }
+
+  /* Farbe/Breite/Abstand kommen von .transport-divider (transport-panel.css)
+     – hier nur, damit sie in der Flex-Zeile nicht mitschrumpft. */
+  .transport-divider {
+    display: block;
+    flex: 0 0 auto;
+  }
+
+  .more-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: 6px 8px;
+    border-radius: 999px;
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .more-toggle:hover {
+    background: var(--surface-alt);
+    color: var(--text);
+  }
+
+  .advanced-panel {
+    display: block;
+    width: 100%;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: max-height 0.18s ease, opacity 0.18s ease;
+  }
+
+  .advanced-panel.open {
+    max-height: 280px;
+    opacity: 1;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .advanced-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .restart-btn {
+    display: inline-flex;
+  }
+
+  /* .step-group/.step-btn-Aussehen (Rahmen, geteilte Border, Hover) kommt
+     komplett von transport-panel.css – hier nur die Mindestbreite in der
+     Flex-Zeile. */
+  .step-group {
+    min-width: 0;
+  }
+
+  .advanced-panel .jump-to {
+    flex-basis: auto;
+  }
+
+  #next-comment-btn {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    padding: 8px 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---- Formularfelder: mind. 16px, sonst zoomt iOS Safari beim Fokus ---- */
+  /* Ein Zoom beim Antippen eines Eingabefelds verschiebt/verzerrt danach
+     das ganze Layout, bis man manuell zurückzoomt – deshalb hier auf 16px
+     angehoben, nur für Mobile (Desktop bleibt bei 14px). */
+  input[type="text"],
+  input[type="url"],
+  input[type="number"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  /* ---- Startseiten-Wizard: kompakter auf kleinen Screens ---- */
+  .hero-page {
+    padding-top: 28px;
+  }
+
+  .hero-title {
+    font-size: 34px;
+  }
+
+  .wizard-card {
+    padding: 22px 16px 18px;
+  }
+
+  /* ---- Playlist-Leiste: mehr Abstand/Fläche gegen Verwipper ---- */
+  .playlist-list {
+    gap: 6px;
+  }
+
+  .playlist-item {
+    padding: 10px 8px;
+  }
+
+  /* ---- Kommentarliste: begrenzte Höhe + eigener Scroll ---- */
+  /* Unterhalb von 900px ist .theater-side nicht mehr sticky (siehe
+     Media-Query oben) und die Kommentarliste damit Teil des normalen
+     Seitenflusses – bei langen Threads sonst sehr langes Scrollen bis zum
+     Ende. Eigene Scroll-Box (analog zum Desktop-Verhalten) hält den
+     Kommentarbereich kompakt und durchsuchbar, ohne die Seite endlos zu
+     verlängern. */
+  .comment-list {
+    max-height: 65vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

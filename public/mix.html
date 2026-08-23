@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<base href="__BASE_HREF__">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Duett – Content-Mix</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-stream-id="">
+  <div class="page page-wide">
+    <header class="site-header">
+      <div class="site-header-titles">
+        <h1><a href="." class="logo-link">Duett</a></h1>
+        <h2 id="stream-title">Lade Session …</h2>
+      </div>
+      <div class="name-indicator">
+        Du kommentierst als <strong id="current-name-display">–</strong>
+        <button type="button" id="change-name-btn" class="link-btn">ändern</button>
+      </div>
+    </header>
+
+    <div id="admin-banner" class="admin-banner hidden">
+      Admin-Modus aktiv – du kannst Items, Kommentare und diese Session löschen.
+      <button type="button" id="delete-stream-btn" class="danger">Session löschen</button>
+    </div>
+
+    <section id="admin-password-card" class="card hidden">
+      <h2>Zugriffsschutz</h2>
+      <p id="admin-password-status" class="field-hint"></p>
+      <form id="admin-password-form">
+        <label for="admin-password-input">Neues Passwort setzen (leer lassen zum Entfernen)</label>
+        <input type="password" id="admin-password-input" placeholder="Passwort" maxlength="200" autocomplete="new-password">
+        <div class="form-actions">
+          <button type="submit">Speichern</button>
+        </div>
+      </form>
+      <p id="admin-password-error" class="error hidden"></p>
+    </section>
+
+    <div id="premium-banner" class="premium-banner hidden">
+      <span class="premium-banner-text" id="premium-banner-text">
+        🎧 Diese Playlist enthält Spotify-Inhalte: volle Wiedergabe erfordert Spotify Premium und Login im selben Browser, sonst nur eine kurze Vorschau. YouTube-Inhalte spielen immer vollständig.
+        <button type="button" id="spotify-login-btn" class="link-btn">Bei Spotify einloggen</button>
+      </span>
+      <button type="button" id="premium-banner-close" class="premium-banner-close" aria-label="Hinweis schließen">×</button>
+    </div>
+
+    <p id="load-error" class="error hidden"></p>
+
+    <div class="theater-container">
+      <div class="theater-player">
+        <div class="card mix-player-card">
+          <div class="mix-now-playing">
+            <img id="now-playing-thumb" class="now-playing-thumb hidden" alt="">
+            <div class="now-playing-meta">
+              <div id="now-playing-title" class="now-playing-title">–</div>
+              <div id="now-playing-artist" class="now-playing-artist"></div>
+            </div>
+          </div>
+
+          <!--
+            spotify-embed/youtube-embed sind bewusst je ein stabiler äußerer
+            Wrapper um ein inneres "-target"-Div: die Spotify-/YouTube-
+            IFrame-APIs ersetzen bzw. manipulieren das ihnen übergebene
+            Element selbst (v. a. YouTube: YT.Player ersetzt das Zielelement
+            komplett durch das Iframe). Würden wir die Sichtbarkeits-Klasse
+            "hidden" direkt auf das der API übergebene Element setzen, liefe
+            das nach dem ersten Laden ins Leere (siehe app.js,
+            ensureSpotifyController/ensureYouTubePlayer) – das äußere Div
+            bleibt dagegen unangetastet und lässt sich zuverlässig ein-/
+            ausblenden (siehe showEmbedFor in app.js).
+          -->
+          <div id="spotify-embed" class="mix-embed hidden">
+            <div id="spotify-embed-target"></div>
+          </div>
+          <div id="youtube-embed" class="mix-embed hidden">
+            <div id="youtube-embed-target"></div>
+          </div>
+          <div id="tiktok-embed" class="mix-embed hidden"></div>
+          <div id="instagram-embed" class="mix-embed hidden"></div>
+
+          <div class="mobile-scrubber track" id="mobile-scrubber">
+            <div class="mobile-scrubber-fill track-fill" id="mobile-scrubber-fill"></div>
+            <div class="mobile-scrubber-thumb track-thumb" id="mobile-scrubber-thumb"></div>
+          </div>
+
+          <div class="seek-buttons">
+            <div class="transport-row transport-toolbar">
+              <button type="button" class="seek-btn icon-btn icobtn" id="prev-item-btn" aria-label="Vorheriges" title="Vorheriges">⏮</button>
+              <button type="button" class="seek-btn" data-seek="-5">−5s</button>
+              <button type="button" class="seek-btn play-pause-btn icobtn btn-primary" id="play-pause-btn" aria-label="Abspielen">▶</button>
+              <button type="button" class="seek-btn" data-seek="5">+5s</button>
+              <button type="button" class="seek-btn icon-btn icobtn" id="next-item-btn" aria-label="Nächstes" title="Nächstes">⏭</button>
+              <span class="transport-divider" aria-hidden="true"></span>
+              <button type="button" class="seek-btn more-toggle" id="advanced-toggle" aria-expanded="false" aria-controls="advanced-panel">⋯ <span>Mehr</span></button>
+            </div>
+
+            <div class="advanced-panel adv-panel" id="advanced-panel">
+              <div class="advanced-row">
+                <button type="button" class="seek-btn icon-btn icobtn restart-btn" id="restart-btn" aria-label="Von Anfang abspielen" title="Von Anfang abspielen">⏮⏮</button>
+                <div class="step-group">
+                  <button type="button" class="step-btn" data-seek="-30">−30s</button>
+                  <button type="button" class="step-btn" data-seek="-1">−1s</button>
+                </div>
+                <div class="step-group">
+                  <button type="button" class="step-btn" data-seek="1">+1s</button>
+                  <button type="button" class="step-btn" data-seek="30">+30s</button>
+                </div>
+              </div>
+            </div>
+
+            <span id="mix-pos-display" class="mix-pos-display">0:00 / 0:00</span>
+          </div>
+        </div>
+
+        <section class="card">
+          <button type="button" id="comment-here-btn">💬 Kommentar an aktueller Stelle</button>
+
+          <form id="comment-form" class="hidden">
+            <div id="comment-timecode-field">
+              <label for="comment-timecode">Zeitpunkt (Sek. im aktuellen Titel)</label>
+              <input type="number" id="comment-timecode" min="0" step="0.1" required>
+            </div>
+
+            <label for="comment-body">Kommentar</label>
+            <textarea id="comment-body" maxlength="2000" rows="3" required placeholder="Was fällt dir hier auf?"></textarea>
+
+            <div class="form-actions">
+              <button type="submit">Absenden</button>
+              <button type="button" id="comment-cancel-btn" class="secondary">Abbrechen</button>
+            </div>
+          </form>
+          <p id="comment-error" class="error hidden"></p>
+        </section>
+
+        <section class="card">
+          <h2>Playlist</h2>
+          <form id="add-item-form" class="add-item-form">
+            <input type="text" id="add-item-input" placeholder="Spotify-, YouTube-, TikTok- oder Instagram-Link hinzufügen …">
+            <button type="submit">+ Hinzufügen</button>
+          </form>
+          <p id="add-item-status" class="resolve-status hidden"></p>
+          <div id="playlist-list" class="playlist-list"></div>
+        </section>
+
+        <section class="card">
+          <h2>Notizen</h2>
+          <p class="field-hint">Für alle mit Zugriff auf diese Session sichtbar und bearbeitbar – wird automatisch gespeichert. Jede Zeile erscheint in der Farbe der Person, die sie zuletzt bearbeitet hat.</p>
+          <div class="notes-field">
+            <div id="notes-view" class="notes-view"></div>
+            <textarea id="notes-textarea" rows="4" placeholder="Gemeinsame Notizen zu dieser Session …" class="hidden"></textarea>
+          </div>
+        </section>
+      </div>
+
+      <div class="theater-side">
+        <section class="card comment-section-card">
+          <div class="comment-list-header">
+            <h2>Kommentare</h2>
+            <div id="read-filter" class="read-filter" role="group" aria-label="Nach Gelesen-Status filtern">
+              <button type="button" class="read-filter-option" data-value="all">Alle</button>
+              <button type="button" class="read-filter-option" data-value="unread">Ungelesen</button>
+              <button type="button" class="read-filter-option" data-value="read">Gelesen</button>
+            </div>
+          </div>
+          <div id="comment-list" class="comment-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="name-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2>Wie sollen wir dich nennen?</h2>
+      <p>Dein Name wird nur in diesem Browser gespeichert und bei deinen Kommentaren angezeigt.</p>
+      <form id="name-modal-form">
+        <input type="text" id="name-modal-input" maxlength="60" required placeholder="Dein Name">
+        <p class="field-hint">Deine Farbe (wird anderen angezeigt)</p>
+        <div id="color-swatches" class="color-swatches" role="radiogroup" aria-label="Deine Farbe"></div>
+        <button type="submit">Los geht's</button>
+      </form>
+      <button type="button" id="name-modal-skip" class="link-btn">Erstmal nur zuschauen</button>
+    </div>
+  </div>
+
+  <div id="password-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h2>Passwort erforderlich</h2>
+      <p>Diese Session ist passwortgeschützt. Bitte gib das Passwort ein, um sie anzusehen.</p>
+      <form id="password-modal-form">
+        <input type="password" id="password-modal-input" required placeholder="Passwort" autocomplete="current-password">
+        <button type="submit">Entsperren</button>
+      </form>
+      <p id="password-modal-error" class="error hidden"></p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
