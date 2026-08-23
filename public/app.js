@@ -2066,8 +2066,43 @@
 
     // ---------- ARD/m3u8-Engine ----------
 
+    // Wird bei einem fatalen HLS-Ladefehler einmalig versucht, bevor die
+    // Fehlermeldung angezeigt wird: ARD/ZDF geben in provider_uri oft
+    // kurzlebige Zugriffs-Tokens aus, die in einer lang laufenden Session
+    // ablaufen können – dann schlägt der ursprünglich aufgelöste Link fehl,
+    // obwohl weder m3u8-URL noch CORS-Header des Hosts das eigentliche
+    // Problem sind (siehe POST /api/items/:iid/refresh in server.js). Pro
+    // Item wird das nur einmal versucht, damit ein dauerhaft kaputter Link
+    // (z. B. wirklich fehlende CORS-Header) nicht in eine Endlosschleife aus
+    // Refresh-Versuchen läuft.
+    const refreshedItemIds = new Set();
+
+    function showArdLoadError() {
+      loadErrorEl.textContent = 'Fehler beim Laden des Videos. Prüfe die m3u8-URL und CORS-Header des Hosts.';
+      loadErrorEl.classList.remove('hidden');
+    }
+
+    async function retryArdItemAfterRefresh(item, startAtSec, autoplay) {
+      if (refreshedItemIds.has(item.id)) {
+        showArdLoadError();
+        return;
+      }
+      refreshedItemIds.add(item.id);
+      try {
+        const result = await apiFetch(`api/items/${item.id}/refresh`, {
+          method: 'POST',
+          headers: accessHeaders(),
+        });
+        item.provider_uri = result.provider_uri;
+        loadArdItem(item, startAtSec, autoplay);
+      } catch {
+        showArdLoadError();
+      }
+    }
+
     function loadArdItem(item, startAtSec, autoplay) {
       showEmbedFor('ard');
+      loadErrorEl.classList.add('hidden');
       if (hls) {
         try {
           hls.destroy();
@@ -2087,14 +2122,20 @@
         hls.attachMedia(video);
         hls.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
-            loadErrorEl.textContent = 'Fehler beim Laden des Videos. Prüfe die m3u8-URL und CORS-Header des Hosts.';
-            loadErrorEl.classList.remove('hidden');
+            retryArdItemAfterRefresh(item, startAtSec, autoplay);
           }
         });
         hls.on(Hls.Events.MANIFEST_PARSED, applyStart);
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = item.provider_uri; // Safari native HLS
         video.addEventListener('loadedmetadata', applyStart, { once: true });
+        video.addEventListener(
+          'error',
+          () => {
+            retryArdItemAfterRefresh(item, startAtSec, autoplay);
+          },
+          { once: true }
+        );
       } else {
         loadErrorEl.textContent = 'HLS wird von diesem Browser nicht unterstützt.';
         loadErrorEl.classList.remove('hidden');

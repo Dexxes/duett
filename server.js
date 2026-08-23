@@ -114,6 +114,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_comment_read_status_comment ON comment_read_status(comment_id);
 `);
 
+// source_url: bei ARD-/ZDF-Items die ursprüngliche Mediathek-Seiten-URL
+// (nicht der aufgelöste m3u8-Link) – ermöglicht ein erneutes Auflösen, falls
+// die im m3u8-Link enthaltenen Zugriffs-Tokens der Sender zwischenzeitlich
+// abgelaufen sind (siehe POST /api/items/:iid/refresh). NULL bei allen
+// anderen Providern sowie bei direkt eingefügten m3u8-/Video-Links ohne
+// erkannte Mediathek-Herkunft.
+ensureColumn('playlist_items', 'source_url', 'TEXT');
+
 // ---------- Migration: ARD-Mediathek und Content-Mix zu einem einzigen,
 // playlist-basierten Modell vereinen ----------
 //
@@ -484,6 +492,7 @@ async function resolveSourceToItems(url, items) {
           artist_or_channel: 'ARD Mediathek',
           duration_ms: null,
           thumbnail_url: null,
+          source_url: trimmed,
         },
       ];
     }
@@ -497,6 +506,7 @@ async function resolveSourceToItems(url, items) {
           artist_or_channel: 'ZDF Mediathek',
           duration_ms: null,
           thumbnail_url: null,
+          source_url: trimmed,
         },
       ];
     }
@@ -539,7 +549,7 @@ function insertPlaylistItems(streamId, items) {
     .prepare('SELECT COALESCE(MAX(position), -1) AS m FROM playlist_items WHERE stream_id = ?')
     .get(streamId).m;
   const insert = db.prepare(
-    'INSERT INTO playlist_items (stream_id, position, provider, provider_uri, title, artist_or_channel, duration_ms, thumbnail_url, added_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO playlist_items (stream_id, position, provider, provider_uri, title, artist_or_channel, duration_ms, thumbnail_url, added_at, source_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   const now = Date.now();
   const insertMany = db.transaction((rows) => {
@@ -557,7 +567,8 @@ function insertPlaylistItems(streamId, items) {
         item.artist_or_channel || '',
         item.duration_ms,
         item.thumbnail_url,
-        now
+        now,
+        item.source_url || null
       );
       pos += 1;
     }
@@ -566,7 +577,7 @@ function insertPlaylistItems(streamId, items) {
 }
 
 const PLAYLIST_ITEM_COLUMNS =
-  'id, stream_id, position, provider, provider_uri, title, artist_or_channel, duration_ms, thumbnail_url, added_at';
+  'id, stream_id, position, provider, provider_uri, title, artist_or_channel, duration_ms, thumbnail_url, added_at, source_url';
 
 // ---------- Passwortschutz pro Session ----------
 //
@@ -1229,6 +1240,44 @@ app.delete('/api/items/:iid', writeLimiter, (req, res) => {
 
   db.prepare('DELETE FROM playlist_items WHERE id = ?').run(item.id);
   res.json({ ok: true });
+});
+
+// Frischen m3u8-Link für ein ARD-/ZDF-Item nachladen: Die von den Sendern
+// ausgegebenen Stream-URLs enthalten häufig kurzlebige Zugriffs-Tokens
+// (siehe resolveArdMediathek/resolveZdfMediathek), die in einer über Stunden
+// oder Tage laufenden Session ablaufen können, während der beim Hinzufügen
+// aufgelöste provider_uri unverändert in der DB steht ("Fehler beim Laden
+// des Videos..." im Player ist meist genau das, kein echtes CORS-Problem).
+// Client ruft diesen Endpoint bei einem fatalen HLS-Ladefehler auf, bevor er
+// die Fehlermeldung anzeigt (siehe loadArdItem in app.js).
+app.post('/api/items/:iid/refresh', writeLimiter, async (req, res) => {
+  const item = db
+    .prepare('SELECT id, stream_id, provider, source_url FROM playlist_items WHERE id = ?')
+    .get(req.params.iid);
+  if (!item) {
+    return res.status(404).json({ error: 'Item nicht gefunden' });
+  }
+  const stream = db
+    .prepare('SELECT id, admin_token, password_hash FROM streams WHERE id = ?')
+    .get(item.stream_id);
+  if (!stream) {
+    return res.status(404).json({ error: 'Stream nicht gefunden' });
+  }
+  if (!checkStreamAccess(req, res, stream)) return;
+
+  if (item.provider !== 'ard' || !item.source_url) {
+    return res.status(400).json({ error: 'Für dieses Item gibt es keine Quelle zum Neuauflösen' });
+  }
+
+  try {
+    const { m3u8_url } = isZdfUrl(item.source_url)
+      ? await resolveZdfMediathek(item.source_url)
+      : await resolveArdMediathek(item.source_url);
+    db.prepare('UPDATE playlist_items SET provider_uri = ? WHERE id = ?').run(m3u8_url, item.id);
+    res.json({ provider_uri: m3u8_url });
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'Konnte nicht neu aufgelöst werden' });
+  }
 });
 
 // Alle Kommentare eines Streams
