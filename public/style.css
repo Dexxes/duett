@@ -757,6 +757,42 @@ video {
 }
 .step-btn:focus-visible {
   outline: 2px solid var(--accent);
+}
+
+/* −30s/−1s/+1s/+30s-Feinsteuerung: nur im Vollbildmodus sichtbar, damit im
+   Nicht-Vollbild nur die ±5s-Buttons angeboten werden. */
+.step-group {
+  display: none;
+}
+
+.player-wrap:fullscreen .step-group,
+.player-wrap:-webkit-full-screen .step-group,
+.player-wrap:-moz-full-screen .step-group {
+  display: flex;
+}
+
+/* stream.html listet die Feinsteuerung als einzelne .seek-btn-Geschwister
+   statt in einer .step-group – hier dieselbe Einschränkung über data-seek. */
+.seek-buttons > .seek-btn[data-seek="-30"],
+.seek-buttons > .seek-btn[data-seek="-1"],
+.seek-buttons > .seek-btn[data-seek="1"],
+.seek-buttons > .seek-btn[data-seek="30"] {
+  display: none;
+}
+
+.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="-30"],
+.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="-1"],
+.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="1"],
+.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="30"],
+.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="-30"],
+.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="-1"],
+.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="1"],
+.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="30"],
+.player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="-30"],
+.player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="-1"],
+.player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="1"],
+.player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="30"] {
+  display: inline-block;
   outline-offset: -2px;
 }
 
