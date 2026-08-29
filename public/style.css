@@ -354,6 +354,7 @@ video {
   justify-content: center;
   background: black;
   padding: 12px;
+  overflow-y: auto;
 }
 
 .player-wrap:-webkit-full-screen {
@@ -362,6 +363,7 @@ video {
   justify-content: center;
   background: black;
   padding: 12px;
+  overflow-y: auto;
 }
 
 .player-wrap:-moz-full-screen {
@@ -370,6 +372,7 @@ video {
   justify-content: center;
   background: black;
   padding: 12px;
+  overflow-y: auto;
 }
 
 .player-wrap:fullscreen video {
@@ -768,6 +771,58 @@ video {
 .step-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+/* −30s/−1s/+1s/+30s-Feinsteuerung: nur im Vollbildmodus sichtbar, damit im
+   Nicht-Vollbild nur die ±5s-Buttons angeboten werden. Jede Vendor-Variante
+   braucht eine EIGENE Regel (siehe Erklärung weiter oben bei "Vollbild"):
+   in einer gemeinsamen Komma-Selektorliste verwirft ein Browser, der eine
+   der Pseudoklassen nicht kennt (z. B. Chromium bei :-moz-full-screen),
+   sonst die GESAMTE Regel. */
+.step-group {
+  display: none;
+}
+
+.player-wrap:fullscreen .step-group {
+  display: flex;
+}
+
+.player-wrap:-webkit-full-screen .step-group {
+  display: flex;
+}
+
+.player-wrap:-moz-full-screen .step-group {
+  display: flex;
+}
+
+/* stream.html listet die Feinsteuerung als einzelne .seek-btn-Geschwister
+   statt in einer .step-group – hier dieselbe Einschränkung über data-seek. */
+.seek-buttons > .seek-btn[data-seek="-30"],
+.seek-buttons > .seek-btn[data-seek="-1"],
+.seek-buttons > .seek-btn[data-seek="1"],
+.seek-buttons > .seek-btn[data-seek="30"] {
+  display: none;
+}
+
+.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="-30"],
+.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="-1"],
+.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="1"],
+.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="30"] {
+  display: inline-block;
+}
+
+.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="-30"],
+.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="-1"],
+.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="1"],
+.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="30"] {
+  display: inline-block;
+}
+
+.player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="-30"],
+.player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="-1"],
+.player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="1"],
+.player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="30"] {
+  display: inline-block;
 }
 
 /* Scrubber */
