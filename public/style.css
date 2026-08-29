@@ -415,16 +415,22 @@ video {
    darüber ist dort überflüssig und wird ausgeblendet. Bei anderen Providern
    (Spotify/YouTube/TikTok) bleibt er sichtbar, da deren Embeds im
    Theater-/Vollbildmodus keinen eigenen Titel zeigen. data-provider wird in
-   showEmbedFor() (app.js) auf .player-wrap gespiegelt. */
-.player-wrap:fullscreen[data-provider="ard"] .mix-now-playing {
+   showEmbedFor() (app.js) auf .player-wrap gespiegelt. Der Speed-Select
+   sitzt zwar im selben .mix-now-playing-Container, bleibt hier aber gezielt
+   sichtbar, weil ARD/Video die Wiedergabegeschwindigkeit unterstützt (siehe
+   providerSupportsPlaybackRate in app.js). */
+.player-wrap:fullscreen[data-provider="ard"] .mix-now-playing .now-playing-thumb,
+.player-wrap:fullscreen[data-provider="ard"] .mix-now-playing .now-playing-meta {
   display: none;
 }
 
-.player-wrap:-webkit-full-screen[data-provider="ard"] .mix-now-playing {
+.player-wrap:-webkit-full-screen[data-provider="ard"] .mix-now-playing .now-playing-thumb,
+.player-wrap:-webkit-full-screen[data-provider="ard"] .mix-now-playing .now-playing-meta {
   display: none;
 }
 
-.player-wrap:-moz-full-screen[data-provider="ard"] .mix-now-playing {
+.player-wrap:-moz-full-screen[data-provider="ard"] .mix-now-playing .now-playing-thumb,
+.player-wrap:-moz-full-screen[data-provider="ard"] .mix-now-playing .now-playing-meta {
   display: none;
 }
 
@@ -1581,6 +1587,10 @@ video {
   margin-bottom: 12px;
 }
 
+.mix-now-playing .speed-select {
+  margin-left: auto;
+}
+
 /* Spotifys IFrame-Embed ist cross-origin (open.spotify.com) – dessen
    eigener Play/Pause-Button (data-testid="play-pause-button") lässt sich
    deshalb NICHT direkt per CSS-Selektor ansprechen oder ausblenden (siehe
@@ -1964,12 +1974,9 @@ button[data-testid="play-pause-button"] {
   position: relative;
 }
 
-/* Wiedergabegeschwindigkeit: oben rechts über dem Video/Embed. */
+/* Wiedergabegeschwindigkeit: sitzt im .mix-now-playing-Kopfbereich, rechts
+   neben Cover/Titel/Interpret (siehe .mix-now-playing .speed-select). */
 .speed-select {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 11;
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
@@ -1977,6 +1984,7 @@ button[data-testid="play-pause-button"] {
   font-size: 13px;
   padding: 3px 6px;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .speed-select.hidden {
