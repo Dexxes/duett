@@ -1,4 +1,4 @@
-docker build -t duett .
+docker build -t duett . --no-cache
 docker run -d \
   --name duett \
   -p 3003:3003 \
