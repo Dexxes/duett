@@ -760,16 +760,27 @@ video {
 }
 .step-btn:focus-visible {
   outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* −30s/−1s/+1s/+30s-Feinsteuerung: nur im Vollbildmodus sichtbar, damit im
-   Nicht-Vollbild nur die ±5s-Buttons angeboten werden. */
+   Nicht-Vollbild nur die ±5s-Buttons angeboten werden. Jede Vendor-Variante
+   braucht eine EIGENE Regel (siehe Erklärung weiter oben bei "Vollbild"):
+   in einer gemeinsamen Komma-Selektorliste verwirft ein Browser, der eine
+   der Pseudoklassen nicht kennt (z. B. Chromium bei :-moz-full-screen),
+   sonst die GESAMTE Regel. */
 .step-group {
   display: none;
 }
 
-.player-wrap:fullscreen .step-group,
-.player-wrap:-webkit-full-screen .step-group,
+.player-wrap:fullscreen .step-group {
+  display: flex;
+}
+
+.player-wrap:-webkit-full-screen .step-group {
+  display: flex;
+}
+
 .player-wrap:-moz-full-screen .step-group {
   display: flex;
 }
@@ -786,17 +797,22 @@ video {
 .player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="-30"],
 .player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="-1"],
 .player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="1"],
-.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="30"],
+.player-wrap:fullscreen .seek-buttons > .seek-btn[data-seek="30"] {
+  display: inline-block;
+}
+
 .player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="-30"],
 .player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="-1"],
 .player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="1"],
-.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="30"],
+.player-wrap:-webkit-full-screen .seek-buttons > .seek-btn[data-seek="30"] {
+  display: inline-block;
+}
+
 .player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="-30"],
 .player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="-1"],
 .player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="1"],
 .player-wrap:-moz-full-screen .seek-buttons > .seek-btn[data-seek="30"] {
   display: inline-block;
-  outline-offset: -2px;
 }
 
 /* Scrubber */
