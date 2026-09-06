@@ -2724,7 +2724,10 @@
         <button type="button" class="link-btn comment-bubble-reply-btn">Antworten</button>
       `;
       bubble.querySelector('.comment-bubble-author').textContent = c.author_name;
-      bubble.querySelector('.comment-bubble-body').textContent = truncateForBubble(c.body);
+      bubble.querySelector('.comment-bubble-body').innerHTML = linkifyWithPlaylistRefs(
+        escapeHtml(truncateForBubble(c.body)),
+        playlist
+      );
       bubble.querySelector('.comment-bubble-reply-btn').addEventListener('click', () => startFsReply(c));
       bubbleOverlay.appendChild(bubble);
 
@@ -2916,6 +2919,13 @@
     }
 
     commentList.addEventListener('click', (e) => {
+      const link = e.target.closest('.playlist-item-link');
+      if (!link) return;
+      e.preventDefault();
+      playPlaylistItemById(Number(link.dataset.itemId));
+    });
+
+    bubbleOverlay?.addEventListener('click', (e) => {
       const link = e.target.closest('.playlist-item-link');
       if (!link) return;
       e.preventDefault();
