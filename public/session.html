@@ -221,16 +221,10 @@
       <h2>Wie sollen wir dich nennen?</h2>
       <p>Dein Name wird nur in diesem Browser gespeichert und bei deinen Kommentaren angezeigt.</p>
       <form id="name-modal-form">
-        <div id="name-modal-step-name">
-          <input type="text" id="name-modal-input" maxlength="60" placeholder="Dein Name">
-          <button type="button" id="name-modal-next-btn">Weiter</button>
-        </div>
-        <div id="name-modal-step-color" class="hidden">
-          <p class="field-hint" id="name-modal-color-hint">Deine Farbe (wird anderen angezeigt)</p>
-          <div id="color-swatches" class="color-swatches" role="radiogroup" aria-label="Deine Farbe"></div>
-          <button type="submit">Los geht's</button>
-          <button type="button" id="name-modal-back-btn" class="link-btn">← Anderer Name</button>
-        </div>
+        <input type="text" id="name-modal-input" maxlength="60" placeholder="Dein Name">
+        <p class="field-hint" id="name-modal-color-hint">Deine Farbe (wird anderen angezeigt)</p>
+        <div id="color-swatches" class="color-swatches" role="radiogroup" aria-label="Deine Farbe"></div>
+        <button type="submit">Los geht's</button>
       </form>
       <button type="button" id="name-modal-skip" class="link-btn">Erstmal nur zuschauen</button>
     </div>
