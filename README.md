@@ -1,7 +1,7 @@
 # Duett – Stream-Kommentar-Webinterface
 
-Webinterface für gemeinsames Kommentieren mit Zeitstempel: ARD-Mediathek-/
-ZDF-Mediathek-/m3u8-Videos, Spotify-Tracks/Alben/Playlists, YouTube-Videos/
+Webinterface für gemeinsames Kommentieren mit Zeitstempel: ARD-/ZDF-/Arte-/
+3sat-Mediathek-/m3u8-Videos, Spotify-Tracks/Alben/Playlists, YouTube-Videos/
 Playlists, TikTok-Videos und Instagram-Reels/-Posts lassen sich beliebig zu einer
 Playlist pro Session mischen. Per Share-Link können Zuschauer:innen Stellen
 mit Zeitstempel kommentieren und aufeinander antworten. Keine Logins – nur
@@ -50,7 +50,7 @@ volumes:
 ## Nutzung
 
 1. Auf der Startseite (`/`) führt ein dreischrittiger Assistent durchs Anlegen:
-   Titel → optional eine erste Quelle (ARD-Mediathek-, ZDF-Mediathek-/m3u8-
+   Titel → optional eine erste Quelle (ARD-, ZDF-, Arte-, 3sat-/m3u8-
    Link, Spotify, YouTube, TikTok oder Instagram – auch komplett
    überspringbar) → optional Kurzlink/Passwort. Es gibt keine
    Pflicht-Erstquelle: eine Session lässt sich auch leer anlegen und danach
@@ -152,19 +152,19 @@ location ~ \.(m3u8|ts)$ {
 Ohne diesen Header schlägt das Laden des Streams im Browser fehl, auch wenn
 die URL direkt im Browser aufrufbar erscheint.
 
-## Playlist-Provider: ARD-Mediathek/ZDF-Mediathek/m3u8, Spotify, YouTube, TikTok, Instagram
+## Playlist-Provider: ARD/ZDF/Arte/3sat/m3u8, Spotify, YouTube, TikTok, Instagram
 
 Jede Session ist eine Playlist, die beliebig viele Items beliebiger Provider
-mischen kann – ARD-/ZDF-Mediathek-/m3u8-Videos sind dabei ein Provider unter
+mischen kann – ARD-/ZDF-/Arte-/3sat-/m3u8-Videos sind dabei ein Provider unter
 mehreren, kein eigener Session-Typ mehr (frühere Versionen kannten eine feste
 Wahl zwischen „ARD-Mediathek" und „Content-Mix"; das ist inzwischen zu einem
 einzigen, einheitlichen Modell verschmolzen – keine Funktion ist dabei
 verloren gegangen). Kommentare hängen am jeweils aktiven Playlist-Item
 (Video/Song/Reel) statt an einem einzigen globalen Timecode.
 
-- Erste Quelle beim Anlegen ist optional: ein ARD-Mediathek-, ZDF-Mediathek-/
+- Erste Quelle beim Anlegen ist optional: ein ARD-, ZDF-, Arte-, 3sat-/
   m3u8-, Spotify-, YouTube-, TikTok- oder Instagram-Link (Track/Video,
-  Album/Playlist bei Spotify/YouTube; ARD/ZDF/TikTok/Instagram sind immer ein
+  Album/Playlist bei Spotify/YouTube; ARD/ZDF/Arte/3sat/TikTok/Instagram sind immer ein
   einzelnes Video/Reel/Post). Eine Session lässt sich auch ganz ohne
   Erstquelle anlegen. Weitere Quellen lassen sich jederzeit über
   „+ Hinzufügen" auf der Session-Seite ergänzen – auch von anderen
@@ -174,6 +174,11 @@ verloren gegangen). Kommentare hängen am jeweils aktiven Playlist-Item
   Links (zdf.de/video/… oder zdf.de/play/…) werden serverseitig über die
   öffentliche ZDF-API zu einem m3u8-Link aufgelöst, genau wie ARD-Mediathek-
   Links – kein API-Key nötig.
+  Arte-Links (arte.tv/<sprache>/videos/<ID>/…) laufen über die öffentliche
+  Arte-Player-API (bevorzugt wird die Fassung ohne Audiodeskription), 3sat-
+  Links (3sat.de/…/<name>.html) über den auf der Videoseite eingebetteten
+  ZDF-Player – beides ebenfalls ohne API-Key. Wie bei ARD/ZDF werden
+  abgelaufene Stream-Links bei einem Ladefehler automatisch neu aufgelöst.
 - Spotify-Playlists/Alben werden serverseitig komplett aufgelöst (alle
   enthaltenen Tracks), YouTube-Playlists clientseitig im Browser (über die
   offizielle YouTube-IFrame-Player-API), TikTok-Videos und Instagram-

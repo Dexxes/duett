@@ -708,6 +708,17 @@
     return /(^|\/\/)(www\.)?zdf\.de\/(video|play)\//i.test((input || '').trim());
   }
 
+  // Arte- und 3sat-Videolinks werden ebenfalls serverseitig zu einem m3u8-
+  // Link aufgelöst (siehe resolveArte/resolveDreiSat in server.js) und
+  // landen genau wie ARD/ZDF als 'ard'-Item.
+  function isArteInput(input) {
+    return /(^|\/\/)(www\.)?arte\.tv\/(de|fr|en|es|pl|it)\/videos\/\d{6}-\d{3}-[AF]/i.test((input || '').trim());
+  }
+
+  function isDreiSatInput(input) {
+    return /(^|\/\/)(www\.)?3sat\.de\/[^?#\s]+\.html/i.test((input || '').trim());
+  }
+
   // Extrahiert "<type>:<shortcode>" aus einem Instagram-Link, im selben
   // Format wie provider_uri in instagramResolver.js – zum Abgleich, ob ein
   // in einem Kommentar geposteter Link schon in der Playlist steckt (siehe
@@ -977,6 +988,8 @@
       else if (isInstagramInput(href)) link = { url: href, provider: 'instagram' };
       else if (isArdMediathekInput(href)) link = { url: href, provider: 'ard' };
       else if (isZdfInput(href)) link = { url: href, provider: 'ard' };
+      else if (isArteInput(href)) link = { url: href, provider: 'ard' };
+      else if (isDreiSatInput(href)) link = { url: href, provider: 'ard' };
       else if (isYouTubeInput(href)) link = { url: href, provider: 'youtube' };
       if (!link) continue;
       const key = `${link.provider}:${href.toLowerCase()}`;
