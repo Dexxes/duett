@@ -946,8 +946,8 @@
   // =========================================================
   // Medien-Links in Kommentaren erkennen
   //
-  // Enthält ein Kommentar einen Spotify-/YouTube-/TikTok-/Instagram-/ARD-
-  // Mediathek-Link, wird das entsprechende Item beim Absenden automatisch
+  // Enthält ein Kommentar einen Spotify-/YouTube-/TikTok-/Instagram- oder
+  // Mediathek-Link (ARD/ZDF/Arte/3sat), wird das entsprechende Item beim Absenden automatisch
   // der Playlist hinzugefügt (siehe ensureLinkAddedToPlaylist); beim
   // Rendern wird der Link – sofern er sich einem bekannten Playlist-Item
   // zuordnen lässt – durch eine In-App-Verlinkung zu diesem Item ersetzt
@@ -971,6 +971,37 @@
 
   const MEDIA_URL_SCAN_RE = /((https?:\/\/|www\.)[^\s<]+|spotify:(?:track|album|playlist):[a-zA-Z0-9]+)/gi;
 
+  // Ordnet einen (bereits mit https:// versehenen) Link einem erkannten
+  // Anbieter zu – gemeinsam genutzt vom automatischen Hinzufügen zur
+  // Playlist (findMediaLinksInText) und vom Rendern der Kommentare/
+  // Sprechblasen (linkifyWithPlaylistRefs), damit beide dieselben Anbieter
+  // kennen. Mediathek-Links (ARD/ZDF/Arte/3sat) landen als 'ard'-Item.
+  function detectMediaLink(href) {
+    if (isSpotifyInput(href)) return { url: href, provider: 'spotify' };
+    if (isTikTokInput(href)) return { url: href, provider: 'tiktok' };
+    if (isInstagramInput(href)) return { url: href, provider: 'instagram' };
+    if (isArdMediathekInput(href) || isZdfInput(href) || isArteInput(href) || isDreiSatInput(href)) {
+      return { url: href, provider: 'ard' };
+    }
+    if (isYouTubeInput(href)) return { url: href, provider: 'youtube' };
+    return null;
+  }
+
+  // Vergleichsschlüssel für Mediathek-Seiten-Links: Host ohne "www.",
+  // Pfad ohne abschließenden Slash, ohne Query/Hash – damit z. B.
+  // ".../videos/100779-000-A/doku/" und ".../videos/100779-000-A/doku"
+  // auf dasselbe Playlist-Item zeigen.
+  function mediathekUrlKey(url) {
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+      const pathname = parsed.pathname.replace(/\/+$/, '').toLowerCase();
+      return `${host}${pathname}`;
+    } catch {
+      return null;
+    }
+  }
+
   function findMediaLinksInText(text) {
     const matches = (text || '').match(MEDIA_URL_SCAN_RE) || [];
     const trailingChars = new Set(['.', ',', ';', ':', '!', '?', ')', ']', '"', "'"]);
@@ -984,15 +1015,7 @@
       if (!url) continue;
       let href = url;
       if (!/^https?:\/\//i.test(href) && !/^spotify:/i.test(href)) href = 'https://' + href;
-      let link = null;
-      if (isSpotifyInput(href)) link = { url: href, provider: 'spotify' };
-      else if (isTikTokInput(href)) link = { url: href, provider: 'tiktok' };
-      else if (isInstagramInput(href)) link = { url: href, provider: 'instagram' };
-      else if (isArdMediathekInput(href)) link = { url: href, provider: 'ard' };
-      else if (isZdfInput(href)) link = { url: href, provider: 'ard' };
-      else if (isArteInput(href)) link = { url: href, provider: 'ard' };
-      else if (isDreiSatInput(href)) link = { url: href, provider: 'ard' };
-      else if (isYouTubeInput(href)) link = { url: href, provider: 'youtube' };
+      const link = detectMediaLink(href);
       if (!link) continue;
       const key = `${link.provider}:${href.toLowerCase()}`;
       if (seen.has(key)) continue;
@@ -1003,10 +1026,9 @@
   }
 
   // Sucht in einer bereits geladenen Playlist nach dem Item, das zu einem
-  // erkannten Medien-Link gehört. Für ARD-Links nicht möglich (provider_uri
-  // ist der aufgelöste m3u8-Link, nicht der ursprüngliche Seiten-Link) –
-  // liefert dafür bewusst immer null, der Link bleibt dann ein normaler
-  // externer Link statt eines Playlist-Sprungs.
+  // erkannten Medien-Link gehört. Mediathek-Items (ARD/ZDF/Arte/3sat) werden
+  // über source_url (die ursprüngliche Seiten-URL) statt über provider_uri
+  // (den aufgelösten m3u8-Link) abgeglichen.
   function findPlaylistItemForLink(link, playlistArr) {
     if (!link || !Array.isArray(playlistArr)) return null;
     if (link.provider === 'youtube') {
@@ -1029,6 +1051,14 @@
       const providerUri = extractInstagramProviderUri(link.url);
       if (!providerUri) return null;
       return playlistArr.find((it) => it.provider === 'instagram' && it.provider_uri === providerUri) || null;
+    }
+    if (link.provider === 'ard') {
+      const key = mediathekUrlKey(link.url);
+      if (!key) return null;
+      return (
+        playlistArr.find((it) => it.provider === 'ard' && it.source_url && mediathekUrlKey(it.source_url) === key) ||
+        null
+      );
     }
     return null;
   }
@@ -1080,11 +1110,11 @@
     });
   }
 
-  // Wie linkify(), aber Spotify-/YouTube-/TikTok-/Instagram-Links, die sich
-  // einem bereits bekannten Playlist-Item zuordnen lassen, werden statt als
-  // externer Link als In-App-Sprung zum Playlist-Item gerendert. Andere URLs
-  // (inkl. ARD-Mediathek-Links, siehe findPlaylistItemForLink) verhalten
-  // sich wie bei linkify() gewohnt. @-Mentions (siehe linkifyMentions) werden
+  // Wie linkify(), aber Spotify-/YouTube-/TikTok-/Instagram- und Mediathek-
+  // Links (ARD/ZDF/Arte/3sat), die sich einem bereits bekannten Playlist-Item
+  // zuordnen lassen, werden statt als externer Link als In-App-Sprung zum
+  // Playlist-Item gerendert. Andere URLs verhalten sich wie bei linkify()
+  // gewohnt. @-Mentions (siehe linkifyMentions) werden
   // zuerst aufgelöst.
   function linkifyWithPlaylistRefs(safeHtml, playlistArr) {
     const withMentions = linkifyMentions(safeHtml, playlistArr);
@@ -1101,12 +1131,7 @@
       let href = core;
       if (!/^https?:\/\//i.test(href)) href = 'https://' + href;
 
-      let link = null;
-      if (isSpotifyInput(href)) link = { url: href, provider: 'spotify' };
-      else if (isTikTokInput(href)) link = { url: href, provider: 'tiktok' };
-      else if (isInstagramInput(href)) link = { url: href, provider: 'instagram' };
-      else if (isYouTubeInput(href)) link = { url: href, provider: 'youtube' };
-
+      const link = detectMediaLink(href);
       const item = link ? findPlaylistItemForLink(link, playlistArr) : null;
       if (item) {
         const icon = playlistItemIcon(item.provider);
@@ -2793,7 +2818,10 @@
         <button type="button" class="link-btn comment-bubble-reply-btn">Antworten</button>
       `;
       bubble.querySelector('.comment-bubble-author').textContent = c.author_name;
-      bubble.querySelector('.comment-bubble-body').textContent = truncateForBubble(c.body);
+      bubble.querySelector('.comment-bubble-body').innerHTML = linkifyWithPlaylistRefs(
+        escapeHtml(truncateForBubble(c.body)),
+        playlist
+      );
       bubble.querySelector('.comment-bubble-reply-btn').addEventListener('click', () => startFsReply(c));
       bubbleOverlay.appendChild(bubble);
 
@@ -2993,6 +3021,13 @@
     }
 
     commentList.addEventListener('click', (e) => {
+      const link = e.target.closest('.playlist-item-link');
+      if (!link) return;
+      e.preventDefault();
+      playPlaylistItemById(Number(link.dataset.itemId));
+    });
+
+    bubbleOverlay?.addEventListener('click', (e) => {
       const link = e.target.closest('.playlist-item-link');
       if (!link) return;
       e.preventDefault();

@@ -500,6 +500,10 @@ video {
   word-break: break-word;
 }
 
+.comment-bubble-body a {
+  pointer-events: auto;
+}
+
 .comment-bubble-reply-btn {
   display: block;
   margin-top: 4px;
@@ -1229,21 +1233,25 @@ video {
   word-break: break-word;
 }
 
-.comment-body a {
+.comment-body a,
+.comment-bubble-body a {
   color: var(--accent);
   word-break: break-all;
   text-decoration: none;
 }
 
-.comment-body a:hover {
+.comment-body a:hover,
+.comment-bubble-body a:hover {
   text-decoration: underline;
 }
 
 /* Content-Mix: Medien-Link in einem Kommentar, der zu einem Playlist-Item
    aufgelöst wurde (siehe linkifyWithPlaylistRefs in app.js) – optisch von
    normalen externen Links abgesetzt, da er statt einer neuen Seite die
-   Playlist-Leiste ansteuert. */
-.comment-body a.playlist-item-link {
+   Playlist-Leiste ansteuert. Gilt auch für Sprechblasen-Kommentare
+   (.comment-bubble-body), die denselben Linkify-Aufruf nutzen. */
+.comment-body a.playlist-item-link,
+.comment-bubble-body a.playlist-item-link {
   font-weight: 600;
   word-break: break-word;
 }
