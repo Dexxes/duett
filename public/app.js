@@ -4,6 +4,7 @@
   const NAME_KEY = 'duett_author_name';
   const COLOR_KEY = 'duett_author_color';
   const SORT_ORDER_KEY = 'duett_comment_sort';
+  const PLAYLIST_SORT_KEY = 'duett_playlist_sort';
   const READ_FILTER_KEY = 'duett_read_filter';
   const STREAM_ACCESS_KEY = 'duett_stream_access';
   const READ_COMMENTS_KEY = 'duett_read_comments';
@@ -1564,7 +1565,11 @@
     const fsReplyAuthorEl = document.getElementById('fs-reply-author');
     const fsReplyCancelBtn = document.getElementById('fs-reply-cancel');
     const sortToggle = document.getElementById('sort-toggle');
-    const sortOptions = document.querySelectorAll('.sort-switch-option');
+    const sortOptions = sortToggle.closest('.sort-switch').querySelectorAll('.sort-switch-option');
+    const playlistSortToggle = document.getElementById('playlist-sort-toggle');
+    const playlistSortOptions = playlistSortToggle
+      ? playlistSortToggle.closest('.sort-switch').querySelectorAll('.sort-switch-option')
+      : [];
 
     // ---------- Kommentar-Sortierung innerhalb eines Playlist-Items ----------
     //
@@ -1591,6 +1596,43 @@
 
     sortToggle.addEventListener('change', () => setSortOrder(sortToggle.checked ? 'desc' : 'asc'));
     sortOptions.forEach((opt) => opt.addEventListener('click', () => setSortOrder(opt.dataset.value)));
+
+    // ---------- Playlist-Sortierung nach Hinzufüge-Datum ----------
+    //
+    // Regelt nur die Anzeige-Reihenfolge der Playlist-Leiste ("neueste" bzw.
+    // "älteste zuerst", Standard: neueste). Wiedergabereihenfolge und
+    // currentIndex (Vor/Zurück) bleiben an der Playlist-Position.
+
+    let playlistSortOrder = localStorage.getItem(PLAYLIST_SORT_KEY) === 'asc' ? 'asc' : 'desc';
+
+    function updatePlaylistSortUI() {
+      if (!playlistSortToggle) return;
+      playlistSortToggle.checked = playlistSortOrder === 'asc';
+      playlistSortOptions.forEach((opt) => opt.classList.toggle('active', opt.dataset.value === playlistSortOrder));
+    }
+    updatePlaylistSortUI();
+
+    function setPlaylistSortOrder(order) {
+      if (order !== 'asc' && order !== 'desc') return;
+      playlistSortOrder = order;
+      localStorage.setItem(PLAYLIST_SORT_KEY, playlistSortOrder);
+      updatePlaylistSortUI();
+      renderPlaylist();
+    }
+
+    if (playlistSortToggle) {
+      playlistSortToggle.addEventListener('change', () =>
+        setPlaylistSortOrder(playlistSortToggle.checked ? 'asc' : 'desc')
+      );
+      // preventDefault: sonst schaltet der Klick auf den Text zusätzlich die
+      // Checkbox im umschließenden <label> um und hebt die Wahl wieder auf.
+      playlistSortOptions.forEach((opt) =>
+        opt.addEventListener('click', (e) => {
+          e.preventDefault();
+          setPlaylistSortOrder(opt.dataset.value);
+        })
+      );
+    }
 
     // ---------- Kommentarfilter (Alle/Ungelesen/Gelesen) ----------
 
@@ -2802,11 +2844,19 @@
         playlistListEl.innerHTML = '<p class="empty-state">Noch keine Playlist-Einträge – füge oben eine Quelle hinzu.</p>';
         return;
       }
-      // Zuletzt hinzugefügte Items zuerst anzeigen (neue Items landen am Ende
-      // von `playlist`, siehe insertPlaylistItems in server.js) – daher hier
-      // rückwärts iterieren. currentIndex/Wiedergabereihenfolge bleiben davon
-      // unberührt, da row.dataset.index weiterhin den echten Array-Index trägt.
-      for (let index = playlist.length - 1; index >= 0; index--) {
+      // Nach Hinzufüge-Datum sortieren (playlistSortOrder, Standard: neueste
+      // zuerst). Items aus demselben Import teilen sich added_at, daher die
+      // Playlist-Position als Tiebreaker. currentIndex/Wiedergabereihenfolge
+      // bleiben davon unberührt, da row.dataset.index weiterhin den echten
+      // Array-Index trägt.
+      const dir = playlistSortOrder === 'asc' ? 1 : -1;
+      const order = playlist
+        .map((item, index) => index)
+        .sort((a, b) => {
+          const diff = (playlist[a].added_at || 0) - (playlist[b].added_at || 0);
+          return dir * (diff || a - b);
+        });
+      for (const index of order) {
         const item = playlist[index];
         const row = document.createElement('div');
         row.className = 'playlist-item' + (index === currentIndex ? ' active' : '');

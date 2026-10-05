@@ -1723,6 +1723,19 @@ video {
 
 /* ---------- Content-Mix: Playlist-Leiste ---------- */
 
+.playlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.playlist-header h2 {
+  margin: 0;
+}
+
 .playlist-list {
   display: flex;
   flex-direction: column;
