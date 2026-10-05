@@ -1595,7 +1595,14 @@
     }
 
     sortToggle.addEventListener('change', () => setSortOrder(sortToggle.checked ? 'desc' : 'asc'));
-    sortOptions.forEach((opt) => opt.addEventListener('click', () => setSortOrder(opt.dataset.value)));
+    // preventDefault: sonst schaltet der Klick auf den Text zusätzlich die
+    // Checkbox im umschließenden <label> um und hebt die Wahl wieder auf.
+    sortOptions.forEach((opt) =>
+      opt.addEventListener('click', (e) => {
+        e.preventDefault();
+        setSortOrder(opt.dataset.value);
+      })
+    );
 
     // ---------- Playlist-Sortierung nach Hinzufüge-Datum ----------
     //
