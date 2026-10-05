@@ -9,6 +9,7 @@
   const STREAM_ACCESS_KEY = 'duett_stream_access';
   const READ_COMMENTS_KEY = 'duett_read_comments';
   const SPOTIFY_HINT_DISMISSED_KEY = 'duett_spotify_hint_dismissed';
+  const SPOTIFY_FULL_PLAYBACK_KEY = 'duett_spotify_full_playback';
   const OVERVIEW_ACCESS_KEY = 'duett_overview_access';
 
   // ---------- Helpers ----------
@@ -1868,7 +1869,30 @@
     function updatePremiumBannerVisibility() {
       const hasSpotify = playlist.some((it) => it.provider === 'spotify');
       const dismissed = localStorage.getItem(SPOTIFY_HINT_DISMISSED_KEY) === '1';
-      premiumBanner.classList.toggle('hidden', !hasSpotify || dismissed);
+      const fullPlayback = localStorage.getItem(SPOTIFY_FULL_PLAYBACK_KEY) === '1';
+      premiumBanner.classList.toggle('hidden', !hasSpotify || dismissed || fullPlayback);
+    }
+
+    // Ob man bei Spotify (mit Premium) eingeloggt ist, verrät das Embed nicht
+    // direkt – aber an der gemeldeten Dauer: ohne Login liefert es nur die
+    // ~30s-Vorschau, mit Login den ganzen Track. Volle Länge → Hinweis weg
+    // (und gemerkt); wieder nur Vorschau bei einem längeren Track (Login
+    // abgelaufen o. ä.) → Merker löschen, Hinweis kommt zurück.
+    const SPOTIFY_PREVIEW_MAX_MS = 31000;
+    function noteSpotifyPlaybackDuration(durationMs, item) {
+      if (!durationMs) return;
+      const fullMs = item?.duration_ms || 0;
+      const known = localStorage.getItem(SPOTIFY_FULL_PLAYBACK_KEY) === '1';
+      if (durationMs > SPOTIFY_PREVIEW_MAX_MS) {
+        if (known) return;
+        localStorage.setItem(SPOTIFY_FULL_PLAYBACK_KEY, '1');
+      } else if (fullMs > SPOTIFY_PREVIEW_MAX_MS) {
+        if (!known) return;
+        localStorage.removeItem(SPOTIFY_FULL_PLAYBACK_KEY);
+      } else {
+        return;
+      }
+      updatePremiumBannerVisibility();
     }
 
     premiumBannerClose?.addEventListener('click', () => {
@@ -2245,6 +2269,7 @@
               controller.addListener('playback_update', (e) => {
                 spotifyHasLoadedTrack = true;
                 if (!spotifyIsActive()) return;
+                noteSpotifyPlaybackDuration(e.data.duration, playlist[currentIndex]);
                 currentPositionSec = (e.data.position || 0) / 1000;
                 currentDurationSec = (e.data.duration || 0) / 1000;
                 isPlaying = !e.data.isPaused;
