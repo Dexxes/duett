@@ -1553,8 +1553,6 @@
     const commentImageAttachHost = document.getElementById('comment-image-attach');
     const commentImageAttach = buildImageAttach(null);
     commentImageAttachHost?.appendChild(commentImageAttach.element);
-    const emojiBtn = document.getElementById('emoji-btn');
-    const emojiFlyout = document.getElementById('emoji-flyout');
     wirePasteImage(commentBodyInput, commentImageAttach);
     wireMentionAutocomplete(commentBodyInput, () => playlist);
     const commentList = document.getElementById('comment-list');
@@ -3151,25 +3149,89 @@
       '❤️', '🔥', '✨', '🎉', '💯', '⭐', '✅', '❌',
     ];
 
-    let emojiFlyoutBuilt = false;
+    // Browser können das native Emoji-Panel des Betriebssystems (Windows:
+    // Win + . / macOS: Ctrl + Cmd + Leertaste) nicht per Script öffnen. Der
+    // Button fokussiert deshalb das Textfeld – so landet ein per Tastenkürzel
+    // geöffnetes System-Panel direkt dort – und zeigt neben der Schnellauswahl
+    // einen Hinweis auf das passende Kürzel.
+    const NATIVE_EMOJI_SHORTCUT = (() => {
+      const platform = navigator.userAgentData?.platform || navigator.platform || '';
+      if (/win/i.test(platform)) return 'Win + .';
+      if (/mac/i.test(platform) && navigator.maxTouchPoints <= 1) return 'Ctrl + Cmd + Leertaste';
+      return null;
+    })();
 
-    function buildEmojiFlyout() {
-      if (emojiFlyoutBuilt || !emojiFlyout) return;
-      emojiFlyoutBuilt = true;
+    // Hängt Emoji-Button + Flyout an eine Kommentar-Textarea. Die Textarea wird
+    // dafür in einen .comment-body-wrap eingepackt (Button sitzt unten rechts).
+    function wireEmojiButton(textarea) {
+      if (!textarea) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'comment-body-wrap';
+      textarea.insertAdjacentElement('beforebegin', wrap);
+      wrap.appendChild(textarea);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'emoji-btn';
+      btn.textContent = '😀';
+      btn.setAttribute('aria-label', 'Emoji einfügen');
+      btn.setAttribute('aria-haspopup', 'true');
+      btn.setAttribute('aria-expanded', 'false');
+      if (NATIVE_EMOJI_SHORTCUT) btn.title = `Emoji einfügen (alle Emojis: ${NATIVE_EMOJI_SHORTCUT})`;
+
+      const flyout = document.createElement('div');
+      flyout.className = 'emoji-flyout hidden';
+      flyout.setAttribute('role', 'menu');
+      flyout.setAttribute('aria-label', 'Emoji-Auswahl');
+
+      // Mousedown auf dem Button soll den Fokus nicht aus der Textarea ziehen,
+      // damit Cursorposition und ein offenes System-Panel erhalten bleiben.
+      btn.addEventListener('mousedown', (e) => e.preventDefault());
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = flyout.classList.contains('hidden');
+        closeAllEmojiFlyouts();
+        if (!willOpen) return;
+        if (!flyout.childElementCount) buildEmojiFlyout(flyout, textarea);
+        flyout.classList.remove('hidden');
+        btn.setAttribute('aria-expanded', 'true');
+        textarea.focus();
+      });
+
+      wrap.append(btn, flyout);
+    }
+
+    function buildEmojiFlyout(flyout, textarea) {
       EMOJI_LIST.forEach((emoji) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'emoji-flyout-option';
-        btn.textContent = emoji;
-        btn.setAttribute('role', 'menuitem');
-        btn.addEventListener('click', () => {
-          insertAtCursor(commentBodyInput, emoji);
-          closeEmojiFlyout();
-          commentBodyInput.focus();
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.className = 'emoji-flyout-option';
+        option.textContent = emoji;
+        option.setAttribute('role', 'menuitem');
+        option.addEventListener('mousedown', (e) => e.preventDefault());
+        option.addEventListener('click', () => {
+          insertAtCursor(textarea, emoji);
+          closeAllEmojiFlyouts();
+          textarea.focus();
         });
-        emojiFlyout.appendChild(btn);
+        flyout.appendChild(option);
+      });
+      if (NATIVE_EMOJI_SHORTCUT) {
+        const hint = document.createElement('p');
+        hint.className = 'emoji-flyout-hint';
+        hint.innerHTML = `Alle Emojis: <kbd>${NATIVE_EMOJI_SHORTCUT}</kbd>`;
+        flyout.appendChild(hint);
+      }
+    }
+
+    function closeAllEmojiFlyouts() {
+      document.querySelectorAll('.emoji-flyout:not(.hidden)').forEach((flyout) => {
+        flyout.classList.add('hidden');
+        flyout.parentElement.querySelector('.emoji-btn')?.setAttribute('aria-expanded', 'false');
       });
     }
+
+    wireEmojiButton(commentBodyInput);
 
     function insertAtCursor(textarea, text) {
       const start = textarea.selectionStart ?? textarea.value.length;
@@ -3193,27 +3255,11 @@
       }
     }
 
-    function openEmojiFlyout() {
-      buildEmojiFlyout();
-      emojiFlyout.classList.remove('hidden');
-      emojiBtn.setAttribute('aria-expanded', 'true');
-    }
-
-    function closeEmojiFlyout() {
-      emojiFlyout?.classList.add('hidden');
-      emojiBtn?.setAttribute('aria-expanded', 'false');
-    }
-
-    emojiBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (emojiFlyout.classList.contains('hidden')) openEmojiFlyout();
-      else closeEmojiFlyout();
-    });
-
+    // Delegiert, damit dynamisch erzeugte Antwort-/Bearbeiten-Formulare keine
+    // eigenen document-Listener anhäufen.
     document.addEventListener('click', (e) => {
-      if (!emojiFlyout || emojiFlyout.classList.contains('hidden')) return;
-      if (e.target === emojiBtn || emojiFlyout.contains(e.target)) return;
-      closeEmojiFlyout();
+      if (e.target.closest?.('.emoji-flyout')) return;
+      closeAllEmojiFlyouts();
     });
 
     // Einmaliger, delegierter Listener statt eines neuen document-Listeners
@@ -3228,7 +3274,7 @@
     });
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeEmojiFlyout();
+      if (e.key === 'Escape') closeAllEmojiFlyouts();
     });
 
     commentCancelBtn.addEventListener('click', () => {
@@ -3236,7 +3282,7 @@
       commentForm.reset();
       commentImageAttach.reset(null);
       commentErrorEl.classList.add('hidden');
-      closeEmojiFlyout();
+      closeAllEmojiFlyouts();
     });
 
     commentForm.addEventListener('submit', async (e) => {
@@ -3261,7 +3307,7 @@
         commentForm.classList.add('hidden');
         commentForm.reset();
         commentImageAttach.reset(null);
-        closeEmojiFlyout();
+        closeAllEmojiFlyouts();
       } catch (err) {
         commentErrorEl.textContent = err.message;
         commentErrorEl.classList.remove('hidden');
@@ -3625,6 +3671,7 @@
       wirePasteImage(textarea, imageAttach);
       submitOnCtrlEnter(textarea, form);
       wireMentionAutocomplete(textarea, () => playlist);
+      wireEmojiButton(textarea);
 
       function openEdit() {
         textarea.value = getBody();
@@ -3778,6 +3825,7 @@
       wirePasteImage(replyForm.querySelector('.reply-body'), replyImageAttach);
       submitOnCtrlEnter(replyForm.querySelector('.reply-body'), replyForm);
       wireMentionAutocomplete(replyForm.querySelector('.reply-body'), () => playlist);
+      wireEmojiButton(replyForm.querySelector('.reply-body'));
 
       replyToggle.addEventListener('click', () => {
         if (!authorName) {
