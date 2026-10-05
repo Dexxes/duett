@@ -173,7 +173,17 @@
         </section>
 
         <section class="card">
-          <h2>Playlist</h2>
+          <div class="playlist-header">
+            <h2>Playlist</h2>
+            <label class="sort-switch">
+              <span class="sort-switch-option" data-value="desc">Neueste zuerst</span>
+              <span class="sort-switch-track">
+                <input type="checkbox" id="playlist-sort-toggle" class="sort-switch-input" aria-label="Playlist nach Hinzufüge-Datum sortieren">
+                <span class="sort-switch-thumb"></span>
+              </span>
+              <span class="sort-switch-option" data-value="asc">Älteste zuerst</span>
+            </label>
+          </div>
           <form id="add-item-form" class="add-item-form">
             <input type="text" id="add-item-input" placeholder="Spotify-, YouTube-, TikTok-, Instagram-, ARD-Mediathek- oder ZDF-/m3u8-Link hinzufügen …">
             <button type="submit">+ Hinzufügen</button>
