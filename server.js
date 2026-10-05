@@ -114,7 +114,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_comment_read_status_comment ON comment_read_status(comment_id);
 `);
 
-// source_url: bei ARD-/ZDF-Items die ursprüngliche Mediathek-Seiten-URL
+// source_url: bei Mediathek-Items (ARD/ZDF/Arte/3sat) die ursprüngliche Mediathek-Seiten-URL
 // (nicht der aufgelöste m3u8-Link) – ermöglicht ein erneutes Auflösen, falls
 // die im m3u8-Link enthaltenen Zugriffs-Tokens der Sender zwischenzeitlich
 // abgelaufen sind (siehe POST /api/items/:iid/refresh). NULL bei allen
@@ -455,7 +455,7 @@ function isArdMediathekUrl(rawUrl) {
   }
 }
 
-// Löst eine Quelle (Spotify-/TikTok-/Instagram-/ARD-Mediathek-URL oder ein
+// Löst eine Quelle (Spotify-/TikTok-/Instagram-/Mediathek-URL oder ein
 // direkter m3u8-/Video-Link, serverseitig aufgelöst, ODER bereits
 // clientseitig aufgelöste YouTube-Item-Liste) zu einem Array fertiger
 // Playlist-Items auf. Genutzt sowohl beim Anlegen einer Session als auch
@@ -482,28 +482,15 @@ async function resolveSourceToItems(url, items) {
     if (parseSpotifyInput(trimmed)) {
       return await resolveSpotify(trimmed);
     }
-    if (isArdMediathekUrl(trimmed)) {
-      const { m3u8_url, title } = await resolveArdMediathek(trimmed);
+    const mediathek = findMediathekSource(trimmed);
+    if (mediathek) {
+      const { m3u8_url, title } = await mediathek.resolve(trimmed);
       return [
         {
           provider: 'ard',
           provider_uri: m3u8_url,
-          title: title || 'ARD-Video',
-          artist_or_channel: 'ARD Mediathek',
-          duration_ms: null,
-          thumbnail_url: null,
-          source_url: trimmed,
-        },
-      ];
-    }
-    if (isZdfUrl(trimmed)) {
-      const { m3u8_url, title } = await resolveZdfMediathek(trimmed);
-      return [
-        {
-          provider: 'ard',
-          provider_uri: m3u8_url,
-          title: title || 'ZDF-Video',
-          artist_or_channel: 'ZDF Mediathek',
+          title: title || mediathek.fallbackTitle,
+          artist_or_channel: mediathek.channel,
           duration_ms: null,
           thumbnail_url: null,
           source_url: trimmed,
@@ -527,7 +514,7 @@ async function resolveSourceToItems(url, items) {
     }
     throw new Error('Das ist weder ein erkennbarer Link noch eine gültige URL');
   }
-  throw new Error('Bitte eine Spotify-, YouTube-, TikTok-, Instagram- oder ARD-/Video-Quelle angeben');
+  throw new Error('Bitte eine Spotify-, YouTube-, TikTok-, Instagram- oder ARD-/ZDF-/Arte-/3sat-/Video-Quelle angeben');
 }
 
 // Hängt Items ans Ende der bestehenden Playlist eines Streams an
@@ -792,6 +779,41 @@ function isZdfUrl(rawUrl) {
   }
 }
 
+// Löst ein PTMD-Template (Platzhalter {playerId}) relativ zur jeweiligen
+// API-Basis auf – gemeinsam genutzt von ZDF und 3sat (3sat läuft auf der
+// ZDF-Plattform).
+function expandZdfPtmdTemplate(template, apiBase) {
+  return new URL(template.replace('{playerId}', 'android_native_6'), apiBase).toString();
+}
+
+// Holt ein PTMD-Dokument und liefert den ersten HLS-Track (.m3u8) daraus.
+// label ("ZDF"/"3sat") nur für die Fehlermeldungen.
+async function fetchM3u8FromPtmd(ptmdUrl, apiToken, label) {
+  let ptmdRes;
+  try {
+    ptmdRes = await fetch(ptmdUrl, { headers: { 'Api-Auth': apiToken } });
+  } catch {
+    throw new Error(`${label}-Stream-API war nicht erreichbar`);
+  }
+  if (!ptmdRes.ok) {
+    throw new Error(`${label}-Stream-API antwortete mit ${ptmdRes.status}`);
+  }
+  const ptmd = await ptmdRes.json();
+
+  for (const p of ptmd?.priorityList || []) {
+    for (const f of p?.formitaeten || []) {
+      for (const q of f?.qualities || []) {
+        for (const t of q?.audio?.tracks || []) {
+          if (typeof t?.uri === 'string' && t.uri.includes('.m3u8')) {
+            return t.uri;
+          }
+        }
+      }
+    }
+  }
+  throw new Error(`Kein HLS-Stream (m3u8) in diesem ${label}-Video gefunden`);
+}
+
 async function resolveZdfMediathek(pageUrl) {
   let parsed;
   try {
@@ -843,38 +865,195 @@ async function resolveZdfMediathek(pageUrl) {
   if (!ptmdTemplate) {
     throw new Error('Kein abspielbarer Stream für dieses ZDF-Video gefunden');
   }
-  const ptmdUrl = new URL(ptmdTemplate.replace('{playerId}', 'android_native_6'), 'https://api.zdf.de').toString();
-
-  let ptmdRes;
-  try {
-    ptmdRes = await fetch(ptmdUrl, { headers: { 'Api-Auth': apiToken } });
-  } catch {
-    throw new Error('ZDF-Stream-API war nicht erreichbar');
-  }
-  if (!ptmdRes.ok) {
-    throw new Error(`ZDF-Stream-API antwortete mit ${ptmdRes.status}`);
-  }
-  const ptmd = await ptmdRes.json();
-
-  let m3u8Url = null;
-  outer: for (const p of ptmd?.priorityList || []) {
-    for (const f of p?.formitaeten || []) {
-      for (const q of f?.qualities || []) {
-        for (const t of q?.audio?.tracks || []) {
-          if (typeof t?.uri === 'string' && t.uri.includes('.m3u8')) {
-            m3u8Url = t.uri;
-            break outer;
-          }
-        }
-      }
-    }
-  }
-
-  if (!m3u8Url) {
-    throw new Error('Kein HLS-Stream (m3u8) in diesem ZDF-Video gefunden');
-  }
+  const ptmdUrl = expandZdfPtmdTemplate(ptmdTemplate, 'https://api.zdf.de');
+  const m3u8Url = await fetchM3u8FromPtmd(ptmdUrl, apiToken, 'ZDF');
 
   return { m3u8_url: m3u8Url, title: video.title || '' };
+}
+
+// ---------- 3sat-Mediathek: m3u8-Link aus Seiten-URL auflösen ----------
+//
+// Erwartet einen 3sat.de-Video-Link, z. B.
+// https://www.3sat.de/dokumentation/reise/traumziele-suedostasiens-100.html
+// 3sat läuft auf der ZDF-Plattform, die Auflösung folgt aber dem älteren
+// Player-Ablauf (nachgebildet nach yt-dlps DreiSatIE):
+//   1. Die Videoseite enthält ein data-zdfplayer-jsb-Attribut mit JSON, das
+//      die Content-API-URL ("content") und ein seitengebundenes API-Token
+//      ("apiToken") liefert.
+//   2. Die Content-API liefert Titel + Pfad zum PTMD-Dokument.
+//   3. PTMD wie bei ZDF auflösen (siehe fetchM3u8FromPtmd).
+
+const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
+
+function isDreiSatUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    return /(^|\.)3sat\.de$/i.test(parsed.hostname) && /\.html$/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function decodeHtmlAttribute(value) {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+async function resolveDreiSat(pageUrl) {
+  if (!isDreiSatUrl(pageUrl)) {
+    throw new Error('Das ist kein 3sat.de-Videolink');
+  }
+
+  let pageRes;
+  try {
+    pageRes = await fetch(pageUrl, { headers: { 'User-Agent': BROWSER_USER_AGENT } });
+  } catch {
+    throw new Error('3sat-Seite war nicht erreichbar');
+  }
+  if (!pageRes.ok) {
+    throw new Error(`3sat-Seite antwortete mit ${pageRes.status}`);
+  }
+  const html = await pageRes.text();
+
+  const m = /data-zdfplayer-jsb=(["'])([\s\S]*?)\1/.exec(html);
+  if (!m) {
+    throw new Error('Auf dieser 3sat-Seite wurde kein Video gefunden');
+  }
+  let player;
+  try {
+    player = JSON.parse(decodeHtmlAttribute(m[2]));
+  } catch {
+    throw new Error('3sat-Player-Daten konnten nicht gelesen werden');
+  }
+  if (typeof player?.content !== 'string' || typeof player?.apiToken !== 'string') {
+    throw new Error('3sat-Player-Daten sind unvollständig');
+  }
+  const contentUrl = new URL(player.content, pageUrl).toString();
+  const apiToken = `Bearer ${player.apiToken}`;
+
+  let contentRes;
+  try {
+    contentRes = await fetch(contentUrl, { headers: { 'Api-Auth': apiToken } });
+  } catch {
+    throw new Error('3sat-API war nicht erreichbar');
+  }
+  if (!contentRes.ok) {
+    throw new Error(`3sat-API antwortete mit ${contentRes.status}`);
+  }
+  const content = await contentRes.json();
+
+  const target = content?.mainVideoContent?.['http://zdf.de/rels/target'];
+  const ptmdPath =
+    target?.streams?.default?.['http://zdf.de/rels/streams/ptmd-template'] ||
+    target?.streams?.default?.['http://zdf.de/rels/streams/ptmd'] ||
+    target?.['http://zdf.de/rels/streams/ptmd-template'] ||
+    target?.['http://zdf.de/rels/streams/ptmd'];
+  if (typeof ptmdPath !== 'string') {
+    throw new Error('Kein abspielbarer Stream für dieses 3sat-Video gefunden');
+  }
+
+  const ptmdUrl = expandZdfPtmdTemplate(ptmdPath, contentUrl);
+  const m3u8Url = await fetchM3u8FromPtmd(ptmdUrl, apiToken, '3sat');
+
+  return { m3u8_url: m3u8Url, title: content.title || content.teaserHeadline || '' };
+}
+
+// ---------- Arte: m3u8-Link aus Seiten-URL auflösen ----------
+//
+// Erwartet einen arte.tv-Video-Link, z. B.
+// https://www.arte.tv/de/videos/100779-000-A/<slug>/
+// Sprache (de/fr/en/es/pl/it) und Programm-ID stecken im Pfad und werden
+// an die öffentliche, tokenlose Player-Config-API übergeben (dieselbe, die
+// der arte.tv-Webplayer und yt-dlps ArteTVIE nutzen). Die Antwort listet
+// mehrere Streams (Sprachfassungen: Original, Synchronfassung, Untertitel,
+// Hörfilm …); bevorzugt wird die erste HLS-Fassung ohne Audiodeskription
+// und ohne Untertitel für Hörgeschädigte – Arte sortiert die zur
+// angefragten Sprache passende Fassung ohnehin nach vorn.
+
+const ARTE_URL_RE = /^\/(de|fr|en|es|pl|it)\/videos\/(\d{6}-\d{3}-[AF])(?:\/|$)/i;
+
+function isArteUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    return /(^|\.)arte\.tv$/i.test(parsed.hostname) && ARTE_URL_RE.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+async function resolveArte(pageUrl) {
+  let parsed;
+  try {
+    parsed = new URL(pageUrl);
+  } catch {
+    throw new Error('Das ist keine gültige URL');
+  }
+  const m = ARTE_URL_RE.exec(parsed.pathname);
+  if (!/(^|\.)arte\.tv$/i.test(parsed.hostname) || !m) {
+    throw new Error('Das ist kein arte.tv/<sprache>/videos/…-Link');
+  }
+  const lang = m[1].toLowerCase();
+  const programId = m[2].toUpperCase();
+
+  let apiRes;
+  try {
+    apiRes = await fetch(
+      `https://api.arte.tv/api/player/v2/config/${lang}/${encodeURIComponent(programId)}`,
+      { headers: { 'x-validated-age': '18' } }
+    );
+  } catch {
+    throw new Error('Arte-API war nicht erreichbar');
+  }
+  if (!apiRes.ok) {
+    throw new Error(`Arte-API antwortete mit ${apiRes.status}`);
+  }
+  const data = await apiRes.json();
+  const attributes = data?.data?.attributes || {};
+
+  const hlsStreams = (attributes.streams || []).filter(
+    (s) => typeof s?.url === 'string' && /HLS/i.test(s?.protocol || '')
+  );
+  if (hlsStreams.length === 0) {
+    const geo = attributes?.restriction?.geoblocking;
+    if (geo?.restrictedArea) {
+      throw new Error('Dieses Arte-Video ist in dieser Region nicht verfügbar');
+    }
+    throw new Error('Kein HLS-Stream (m3u8) in diesem Arte-Video gefunden');
+  }
+  const isAccessibilityVersion = (s) => {
+    const code = s?.versions?.[0]?.eStat?.ml5 || '';
+    return /AUD|STM/i.test(code);
+  };
+  const stream = hlsStreams.find((s) => !isAccessibilityVersion(s)) || hlsStreams[0];
+
+  const meta = attributes.metadata || {};
+  const title = [meta.title, meta.subtitle].filter((t) => typeof t === 'string' && t.trim()).join(' – ');
+
+  return { m3u8_url: stream.url, title };
+}
+
+// ---------- Mediathek-Registry ----------
+//
+// Alle Mediathek-Quellen, deren Seiten-Links serverseitig zu einem m3u8-Link
+// aufgelöst werden. Jede landet als generisches 'ard'-Item (siehe
+// resolveSourceToItems) mit source_url, damit abgelaufene Stream-Links über
+// POST /api/items/:iid/refresh neu aufgelöst werden können.
+const MEDIATHEK_SOURCES = [
+  { matches: isArdMediathekUrl, resolve: resolveArdMediathek, fallbackTitle: 'ARD-Video', channel: 'ARD Mediathek' },
+  { matches: isZdfUrl, resolve: resolveZdfMediathek, fallbackTitle: 'ZDF-Video', channel: 'ZDF Mediathek' },
+  { matches: isArteUrl, resolve: resolveArte, fallbackTitle: 'Arte-Video', channel: 'Arte' },
+  { matches: isDreiSatUrl, resolve: resolveDreiSat, fallbackTitle: '3sat-Video', channel: '3sat Mediathek' },
+];
+
+function findMediathekSource(rawUrl) {
+  return MEDIATHEK_SOURCES.find((src) => src.matches(rawUrl)) || null;
 }
 
 // ---------- App ----------
@@ -1242,7 +1421,7 @@ app.delete('/api/items/:iid', writeLimiter, (req, res) => {
   res.json({ ok: true });
 });
 
-// Frischen m3u8-Link für ein ARD-/ZDF-Item nachladen: Die von den Sendern
+// Frischen m3u8-Link für ein Mediathek-Item (ARD/ZDF/Arte/3sat) nachladen: Die von den Sendern
 // ausgegebenen Stream-URLs enthalten häufig kurzlebige Zugriffs-Tokens
 // (siehe resolveArdMediathek/resolveZdfMediathek), die in einer über Stunden
 // oder Tage laufenden Session ablaufen können, während der beim Hinzufügen
@@ -1270,8 +1449,11 @@ app.post('/api/items/:iid/refresh', writeLimiter, async (req, res) => {
   }
 
   try {
-    const { m3u8_url } = isZdfUrl(item.source_url)
-      ? await resolveZdfMediathek(item.source_url)
+    // Fallback ARD: ältere Items vor Einführung der Registry stammen nur
+    // aus ARD oder ZDF.
+    const mediathek = findMediathekSource(item.source_url);
+    const { m3u8_url } = mediathek
+      ? await mediathek.resolve(item.source_url)
       : await resolveArdMediathek(item.source_url);
     db.prepare('UPDATE playlist_items SET provider_uri = ? WHERE id = ?').run(m3u8_url, item.id);
     res.json({ provider_uri: m3u8_url });

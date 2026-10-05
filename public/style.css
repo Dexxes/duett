@@ -981,28 +981,6 @@ video {
   align-items: stretch;
 }
 
-/* Schritt 1 (Name): Eingabe + "Weiter"-Button nebeneinander, wie die
-   übrigen einzeiligen Modal-Formulare. */
-#name-modal-step-name {
-  display: flex;
-  gap: 8px;
-}
-
-/* Schritt 2 (Farbe): erscheint nur, wenn der eingegebene Name in dieser
-   Session noch keiner bekannten Farbe zugeordnet werden konnte (siehe
-   findKnownColorForName in app.js) – sonst wird direkt übernommen und
-   dieser Schritt komplett übersprungen. */
-#name-modal-step-color {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-}
-
-#name-modal-back-btn {
-  margin-top: 2px;
-}
-
 .color-swatches {
   display: flex;
   flex-wrap: wrap;
@@ -1730,6 +1708,19 @@ video {
 }
 
 /* ---------- Content-Mix: Playlist-Leiste ---------- */
+
+.playlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.playlist-header h2 {
+  margin: 0;
+}
 
 .playlist-list {
   display: flex;

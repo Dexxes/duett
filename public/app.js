@@ -4,10 +4,12 @@
   const NAME_KEY = 'duett_author_name';
   const COLOR_KEY = 'duett_author_color';
   const SORT_ORDER_KEY = 'duett_comment_sort';
+  const PLAYLIST_SORT_KEY = 'duett_playlist_sort';
   const READ_FILTER_KEY = 'duett_read_filter';
   const STREAM_ACCESS_KEY = 'duett_stream_access';
   const READ_COMMENTS_KEY = 'duett_read_comments';
   const SPOTIFY_HINT_DISMISSED_KEY = 'duett_spotify_hint_dismissed';
+  const SPOTIFY_FULL_PLAYBACK_KEY = 'duett_spotify_full_playback';
   const OVERVIEW_ACCESS_KEY = 'duett_overview_access';
 
   // ---------- Helpers ----------
@@ -708,6 +710,17 @@
     return /(^|\/\/)(www\.)?zdf\.de\/(video|play)\//i.test((input || '').trim());
   }
 
+  // Arte- und 3sat-Videolinks werden ebenfalls serverseitig zu einem m3u8-
+  // Link aufgelöst (siehe resolveArte/resolveDreiSat in server.js) und
+  // landen genau wie ARD/ZDF als 'ard'-Item.
+  function isArteInput(input) {
+    return /(^|\/\/)(www\.)?arte\.tv\/(de|fr|en|es|pl|it)\/videos\/\d{6}-\d{3}-[AF]/i.test((input || '').trim());
+  }
+
+  function isDreiSatInput(input) {
+    return /(^|\/\/)(www\.)?3sat\.de\/[^?#\s]+\.html/i.test((input || '').trim());
+  }
+
   // Extrahiert "<type>:<shortcode>" aus einem Instagram-Link, im selben
   // Format wie provider_uri in instagramResolver.js – zum Abgleich, ob ein
   // in einem Kommentar geposteter Link schon in der Playlist steckt (siehe
@@ -977,6 +990,8 @@
       else if (isInstagramInput(href)) link = { url: href, provider: 'instagram' };
       else if (isArdMediathekInput(href)) link = { url: href, provider: 'ard' };
       else if (isZdfInput(href)) link = { url: href, provider: 'ard' };
+      else if (isArteInput(href)) link = { url: href, provider: 'ard' };
+      else if (isDreiSatInput(href)) link = { url: href, provider: 'ard' };
       else if (isYouTubeInput(href)) link = { url: href, provider: 'youtube' };
       if (!link) continue;
       const key = `${link.provider}:${href.toLowerCase()}`;
@@ -1530,10 +1545,6 @@
     const nameModalForm = document.getElementById('name-modal-form');
     const nameModalInput = document.getElementById('name-modal-input');
     const nameModalSkip = document.getElementById('name-modal-skip');
-    const nameModalStepName = document.getElementById('name-modal-step-name');
-    const nameModalStepColor = document.getElementById('name-modal-step-color');
-    const nameModalNextBtn = document.getElementById('name-modal-next-btn');
-    const nameModalBackBtn = document.getElementById('name-modal-back-btn');
     const colorSwatchesEl = document.getElementById('color-swatches');
     const adminPasswordCard = document.getElementById('admin-password-card');
     const adminPasswordStatus = document.getElementById('admin-password-status');
@@ -1564,7 +1575,11 @@
     const fsReplyAuthorEl = document.getElementById('fs-reply-author');
     const fsReplyCancelBtn = document.getElementById('fs-reply-cancel');
     const sortToggle = document.getElementById('sort-toggle');
-    const sortOptions = document.querySelectorAll('.sort-switch-option');
+    const sortOptions = sortToggle.closest('.sort-switch').querySelectorAll('.sort-switch-option');
+    const playlistSortToggle = document.getElementById('playlist-sort-toggle');
+    const playlistSortOptions = playlistSortToggle
+      ? playlistSortToggle.closest('.sort-switch').querySelectorAll('.sort-switch-option')
+      : [];
 
     // ---------- Kommentar-Sortierung innerhalb eines Playlist-Items ----------
     //
@@ -1590,7 +1605,51 @@
     }
 
     sortToggle.addEventListener('change', () => setSortOrder(sortToggle.checked ? 'desc' : 'asc'));
-    sortOptions.forEach((opt) => opt.addEventListener('click', () => setSortOrder(opt.dataset.value)));
+    // preventDefault: sonst schaltet der Klick auf den Text zusätzlich die
+    // Checkbox im umschließenden <label> um und hebt die Wahl wieder auf.
+    sortOptions.forEach((opt) =>
+      opt.addEventListener('click', (e) => {
+        e.preventDefault();
+        setSortOrder(opt.dataset.value);
+      })
+    );
+
+    // ---------- Playlist-Sortierung nach Hinzufüge-Datum ----------
+    //
+    // Regelt nur die Anzeige-Reihenfolge der Playlist-Leiste ("neueste" bzw.
+    // "älteste zuerst", Standard: neueste). Wiedergabereihenfolge und
+    // currentIndex (Vor/Zurück) bleiben an der Playlist-Position.
+
+    let playlistSortOrder = localStorage.getItem(PLAYLIST_SORT_KEY) === 'asc' ? 'asc' : 'desc';
+
+    function updatePlaylistSortUI() {
+      if (!playlistSortToggle) return;
+      playlistSortToggle.checked = playlistSortOrder === 'asc';
+      playlistSortOptions.forEach((opt) => opt.classList.toggle('active', opt.dataset.value === playlistSortOrder));
+    }
+    updatePlaylistSortUI();
+
+    function setPlaylistSortOrder(order) {
+      if (order !== 'asc' && order !== 'desc') return;
+      playlistSortOrder = order;
+      localStorage.setItem(PLAYLIST_SORT_KEY, playlistSortOrder);
+      updatePlaylistSortUI();
+      renderPlaylist();
+    }
+
+    if (playlistSortToggle) {
+      playlistSortToggle.addEventListener('change', () =>
+        setPlaylistSortOrder(playlistSortToggle.checked ? 'asc' : 'desc')
+      );
+      // preventDefault: sonst schaltet der Klick auf den Text zusätzlich die
+      // Checkbox im umschließenden <label> um und hebt die Wahl wieder auf.
+      playlistSortOptions.forEach((opt) =>
+        opt.addEventListener('click', (e) => {
+          e.preventDefault();
+          setPlaylistSortOrder(opt.dataset.value);
+        })
+      );
+    }
 
     // ---------- Kommentarfilter (Alle/Ungelesen/Gelesen) ----------
 
@@ -1613,26 +1672,24 @@
     }
     updateNameDisplay();
 
-    function onColorSwatchSelect(color) {
-      authorColorChoice = color;
-      renderColorSwatches(colorSwatchesEl, authorColorChoice, onColorSwatchSelect);
-    }
+    // Farbauswahl im Modal ist ein Entwurf: erst beim Absenden übernommen,
+    // "Erstmal nur zuschauen" verwirft sie. colorTouched merkt sich, ob die
+    // Person im Modal selbst eine Farbe angeklickt hat (siehe
+    // submitNameModal).
+    let modalColorChoice = authorColorChoice;
+    let colorTouched = false;
 
-    // Zweistufiger Ablauf, damit die Farbe nicht bei jedem Namenswechsel neu
-    // abgefragt werden muss: Schritt 1 fragt nur den Namen ab. Erst wenn
-    // dieser Name in DIESER Session noch mit keiner Farbe aufgetaucht ist
-    // (siehe findKnownColorForName), folgt Schritt 2 zur Farbauswahl – ist
-    // der Name schon bekannt (z. B. weil sich mehrere Personen ein Gerät
-    // teilen und jede ihren eigenen Namen einträgt), wird dessen zuletzt
-    // benutzte Farbe direkt übernommen und der Farbschritt übersprungen.
-    function showNameModalStep(step) {
-      nameModalStepName?.classList.toggle('hidden', step !== 'name');
-      nameModalStepColor?.classList.toggle('hidden', step !== 'color');
+    function onColorSwatchSelect(color) {
+      modalColorChoice = color;
+      colorTouched = true;
+      renderColorSwatches(colorSwatchesEl, modalColorChoice, onColorSwatchSelect);
     }
 
     function openNameModal() {
       nameModalInput.value = authorName;
-      showNameModalStep('name');
+      modalColorChoice = authorColorChoice;
+      colorTouched = false;
+      renderColorSwatches(colorSwatchesEl, modalColorChoice, onColorSwatchSelect);
       nameModal.classList.remove('hidden');
       setTimeout(() => nameModalInput.focus(), 0);
     }
@@ -1663,10 +1720,31 @@
       return match ? match.author_color : null;
     }
 
-    function finalizeNameModal() {
+    // Name und Farbe stehen im selben Modal, damit beides jederzeit über
+    // "Name ändern" angepasst werden kann. Damit die Farbe trotzdem nicht bei
+    // jedem Namenswechsel neu gewählt werden muss: Wechselt jemand den Namen,
+    // ohne selbst eine Farbe anzuklicken, und ist dieser Name in DIESER
+    // Session schon mit einer Farbe aufgetaucht (siehe findKnownColorForName,
+    // z. B. weil sich mehrere Personen ein Gerät teilen), wird dessen zuletzt
+    // benutzte Farbe übernommen.
+    async function submitNameModal() {
       const value = nameModalInput.value.trim();
-      if (!value) return;
+      if (!value) {
+        nameModalInput.focus();
+        return;
+      }
+      const submitBtn = nameModalForm.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        if (!colorTouched && value !== authorName) {
+          const knownColor = await findKnownColorForName(value);
+          if (knownColor) modalColorChoice = knownColor;
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
       authorName = value;
+      authorColorChoice = modalColorChoice;
       localStorage.setItem(NAME_KEY, authorName);
       localStorage.setItem(COLOR_KEY, authorColorChoice);
       updateNameDisplay();
@@ -1679,42 +1757,9 @@
       migrateLegacyLocalReadStatus();
     }
 
-    async function advanceFromNameStep() {
-      const value = nameModalInput.value.trim();
-      if (!value) {
-        nameModalInput.focus();
-        return;
-      }
-      nameModalNextBtn.disabled = true;
-      try {
-        const knownColor = await findKnownColorForName(value);
-        if (knownColor) {
-          authorColorChoice = knownColor;
-          finalizeNameModal();
-        } else {
-          renderColorSwatches(colorSwatchesEl, authorColorChoice, onColorSwatchSelect);
-          showNameModalStep('color');
-        }
-      } finally {
-        nameModalNextBtn.disabled = false;
-      }
-    }
-
-    nameModalNextBtn?.addEventListener('click', advanceFromNameStep);
-    nameModalInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !nameModalStepName?.classList.contains('hidden')) {
-        e.preventDefault();
-        advanceFromNameStep();
-      }
-    });
-    nameModalBackBtn?.addEventListener('click', () => {
-      showNameModalStep('name');
-      setTimeout(() => nameModalInput.focus(), 0);
-    });
-
     nameModalForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      finalizeNameModal();
+      submitNameModal();
     });
     nameModalSkip.addEventListener('click', closeNameModal);
     changeNameBtn.addEventListener('click', openNameModal);
@@ -1837,7 +1882,30 @@
     function updatePremiumBannerVisibility() {
       const hasSpotify = playlist.some((it) => it.provider === 'spotify');
       const dismissed = localStorage.getItem(SPOTIFY_HINT_DISMISSED_KEY) === '1';
-      premiumBanner.classList.toggle('hidden', !hasSpotify || dismissed);
+      const fullPlayback = localStorage.getItem(SPOTIFY_FULL_PLAYBACK_KEY) === '1';
+      premiumBanner.classList.toggle('hidden', !hasSpotify || dismissed || fullPlayback);
+    }
+
+    // Ob man bei Spotify (mit Premium) eingeloggt ist, verrät das Embed nicht
+    // direkt – aber an der gemeldeten Dauer: ohne Login liefert es nur die
+    // ~30s-Vorschau, mit Login den ganzen Track. Volle Länge → Hinweis weg
+    // (und gemerkt); wieder nur Vorschau bei einem längeren Track (Login
+    // abgelaufen o. ä.) → Merker löschen, Hinweis kommt zurück.
+    const SPOTIFY_PREVIEW_MAX_MS = 31000;
+    function noteSpotifyPlaybackDuration(durationMs, item) {
+      if (!durationMs) return;
+      const fullMs = item?.duration_ms || 0;
+      const known = localStorage.getItem(SPOTIFY_FULL_PLAYBACK_KEY) === '1';
+      if (durationMs > SPOTIFY_PREVIEW_MAX_MS) {
+        if (known) return;
+        localStorage.setItem(SPOTIFY_FULL_PLAYBACK_KEY, '1');
+      } else if (fullMs > SPOTIFY_PREVIEW_MAX_MS) {
+        if (!known) return;
+        localStorage.removeItem(SPOTIFY_FULL_PLAYBACK_KEY);
+      } else {
+        return;
+      }
+      updatePremiumBannerVisibility();
     }
 
     premiumBannerClose?.addEventListener('click', () => {
@@ -2214,6 +2282,7 @@
               controller.addListener('playback_update', (e) => {
                 spotifyHasLoadedTrack = true;
                 if (!spotifyIsActive()) return;
+                noteSpotifyPlaybackDuration(e.data.duration, playlist[currentIndex]);
                 currentPositionSec = (e.data.position || 0) / 1000;
                 currentDurationSec = (e.data.duration || 0) / 1000;
                 isPlaying = !e.data.isPaused;
@@ -2805,11 +2874,19 @@
         playlistListEl.innerHTML = '<p class="empty-state">Noch keine Playlist-Einträge – füge oben eine Quelle hinzu.</p>';
         return;
       }
-      // Zuletzt hinzugefügte Items zuerst anzeigen (neue Items landen am Ende
-      // von `playlist`, siehe insertPlaylistItems in server.js) – daher hier
-      // rückwärts iterieren. currentIndex/Wiedergabereihenfolge bleiben davon
-      // unberührt, da row.dataset.index weiterhin den echten Array-Index trägt.
-      for (let index = playlist.length - 1; index >= 0; index--) {
+      // Nach Hinzufüge-Datum sortieren (playlistSortOrder, Standard: neueste
+      // zuerst). Items aus demselben Import teilen sich added_at, daher die
+      // Playlist-Position als Tiebreaker. currentIndex/Wiedergabereihenfolge
+      // bleiben davon unberührt, da row.dataset.index weiterhin den echten
+      // Array-Index trägt.
+      const dir = playlistSortOrder === 'asc' ? 1 : -1;
+      const order = playlist
+        .map((item, index) => index)
+        .sort((a, b) => {
+          const diff = (playlist[a].added_at || 0) - (playlist[b].added_at || 0);
+          return dir * (diff || a - b);
+        });
+      for (const index of order) {
         const item = playlist[index];
         const row = document.createElement('div');
         row.className = 'playlist-item' + (index === currentIndex ? ' active' : '');
