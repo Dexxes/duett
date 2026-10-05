@@ -1530,10 +1530,6 @@
     const nameModalForm = document.getElementById('name-modal-form');
     const nameModalInput = document.getElementById('name-modal-input');
     const nameModalSkip = document.getElementById('name-modal-skip');
-    const nameModalStepName = document.getElementById('name-modal-step-name');
-    const nameModalStepColor = document.getElementById('name-modal-step-color');
-    const nameModalNextBtn = document.getElementById('name-modal-next-btn');
-    const nameModalBackBtn = document.getElementById('name-modal-back-btn');
     const colorSwatchesEl = document.getElementById('color-swatches');
     const adminPasswordCard = document.getElementById('admin-password-card');
     const adminPasswordStatus = document.getElementById('admin-password-status');
@@ -1613,26 +1609,24 @@
     }
     updateNameDisplay();
 
-    function onColorSwatchSelect(color) {
-      authorColorChoice = color;
-      renderColorSwatches(colorSwatchesEl, authorColorChoice, onColorSwatchSelect);
-    }
+    // Farbauswahl im Modal ist ein Entwurf: erst beim Absenden übernommen,
+    // "Erstmal nur zuschauen" verwirft sie. colorTouched merkt sich, ob die
+    // Person im Modal selbst eine Farbe angeklickt hat (siehe
+    // submitNameModal).
+    let modalColorChoice = authorColorChoice;
+    let colorTouched = false;
 
-    // Zweistufiger Ablauf, damit die Farbe nicht bei jedem Namenswechsel neu
-    // abgefragt werden muss: Schritt 1 fragt nur den Namen ab. Erst wenn
-    // dieser Name in DIESER Session noch mit keiner Farbe aufgetaucht ist
-    // (siehe findKnownColorForName), folgt Schritt 2 zur Farbauswahl – ist
-    // der Name schon bekannt (z. B. weil sich mehrere Personen ein Gerät
-    // teilen und jede ihren eigenen Namen einträgt), wird dessen zuletzt
-    // benutzte Farbe direkt übernommen und der Farbschritt übersprungen.
-    function showNameModalStep(step) {
-      nameModalStepName?.classList.toggle('hidden', step !== 'name');
-      nameModalStepColor?.classList.toggle('hidden', step !== 'color');
+    function onColorSwatchSelect(color) {
+      modalColorChoice = color;
+      colorTouched = true;
+      renderColorSwatches(colorSwatchesEl, modalColorChoice, onColorSwatchSelect);
     }
 
     function openNameModal() {
       nameModalInput.value = authorName;
-      showNameModalStep('name');
+      modalColorChoice = authorColorChoice;
+      colorTouched = false;
+      renderColorSwatches(colorSwatchesEl, modalColorChoice, onColorSwatchSelect);
       nameModal.classList.remove('hidden');
       setTimeout(() => nameModalInput.focus(), 0);
     }
@@ -1663,10 +1657,31 @@
       return match ? match.author_color : null;
     }
 
-    function finalizeNameModal() {
+    // Name und Farbe stehen im selben Modal, damit beides jederzeit über
+    // "Name ändern" angepasst werden kann. Damit die Farbe trotzdem nicht bei
+    // jedem Namenswechsel neu gewählt werden muss: Wechselt jemand den Namen,
+    // ohne selbst eine Farbe anzuklicken, und ist dieser Name in DIESER
+    // Session schon mit einer Farbe aufgetaucht (siehe findKnownColorForName,
+    // z. B. weil sich mehrere Personen ein Gerät teilen), wird dessen zuletzt
+    // benutzte Farbe übernommen.
+    async function submitNameModal() {
       const value = nameModalInput.value.trim();
-      if (!value) return;
+      if (!value) {
+        nameModalInput.focus();
+        return;
+      }
+      const submitBtn = nameModalForm.querySelector('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
+      try {
+        if (!colorTouched && value !== authorName) {
+          const knownColor = await findKnownColorForName(value);
+          if (knownColor) modalColorChoice = knownColor;
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
       authorName = value;
+      authorColorChoice = modalColorChoice;
       localStorage.setItem(NAME_KEY, authorName);
       localStorage.setItem(COLOR_KEY, authorColorChoice);
       updateNameDisplay();
@@ -1679,42 +1694,9 @@
       migrateLegacyLocalReadStatus();
     }
 
-    async function advanceFromNameStep() {
-      const value = nameModalInput.value.trim();
-      if (!value) {
-        nameModalInput.focus();
-        return;
-      }
-      nameModalNextBtn.disabled = true;
-      try {
-        const knownColor = await findKnownColorForName(value);
-        if (knownColor) {
-          authorColorChoice = knownColor;
-          finalizeNameModal();
-        } else {
-          renderColorSwatches(colorSwatchesEl, authorColorChoice, onColorSwatchSelect);
-          showNameModalStep('color');
-        }
-      } finally {
-        nameModalNextBtn.disabled = false;
-      }
-    }
-
-    nameModalNextBtn?.addEventListener('click', advanceFromNameStep);
-    nameModalInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !nameModalStepName?.classList.contains('hidden')) {
-        e.preventDefault();
-        advanceFromNameStep();
-      }
-    });
-    nameModalBackBtn?.addEventListener('click', () => {
-      showNameModalStep('name');
-      setTimeout(() => nameModalInput.focus(), 0);
-    });
-
     nameModalForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      finalizeNameModal();
+      submitNameModal();
     });
     nameModalSkip.addEventListener('click', closeNameModal);
     changeNameBtn.addEventListener('click', openNameModal);
