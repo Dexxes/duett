@@ -20,9 +20,9 @@
 //
 // Wichtigster Unterschied zu TikTok: Instagrams offizielles embed.js bietet
 // keine dokumentierte JS-Steuerung von außen (kein Play/Pause/Seek, kein
-// Ende-Event) – anders als TikToks Embed Player. Deshalb spielt Duett
-// Instagram-Items NICHT über das offizielle Blockquote+embed.js ab, sondern
-// über fetchInstagramEmbedMedia() weiter unten (Details dort).
+// Ende-Event) – anders als TikToks Embed Player. Duett zeigt Instagram-Items
+// deshalb als offizielles Blockquote+embed.js (siehe loadInstagramItem in
+// app.js) ohne Timeline-Funktionen; Kommentare dazu haben keinen Zeitbezug.
 //
 // Zweiter Unterschied zu TikTok, per Live-Abruf verifiziert: Die tokenlose
 // Antwort enthält NUR die Felder version/provider_name/provider_url/type/
@@ -37,9 +37,6 @@
 // Shortcode statt eines echten Post-Titels/Vorschaubilds.
 
 const GRAPH_API_VERSION = 'v25.0';
-
-const EMBED_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 // Erkennt sowohl /reel/<shortcode>/ als auch /p/<shortcode>/ (Fotos,
 // Karussells und als Feed-Post geteilte Videos), optional mit vorangestelltem
@@ -138,82 +135,4 @@ async function resolveInstagram(input) {
   ];
 }
 
-function unescapeHtml(str) {
-  return str
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
-}
-
-// ---------- Frisches Video für die eigentliche Wiedergabe ----------
-//
-// Grund: Instagrams offizielles Embed (Blockquote + embed.js) bietet keine
-// Steuerung von außen (siehe Kommentar oben) – verifiziert per Analyse einer
-// gespeicherten /embed/-Antwort: kein postMessage, kein window.parent-Zugriff
-// im gesamten Embed-HTML. Die Seite enthält aber ein natives <video>-Tag mit
-// einer direkten MP4-URL (kein iframe/Custom-Player-Overlay ohne
-// zugängliches Video-Element) – die lässt sich extrahieren und in einem
-// eigenen <video>-Element abspielen (siehe loadInstagramItem in app.js),
-// mit voller Kontrolle (Play/Pause/Seek/Ende-Event, genau wie bei einem
-// normalen HTML5-Video).
-//
-// ZWEI WICHTIGE EINSCHRÄNKUNGEN, unbedingt beim Aufrufen beachten:
-//
-// 1. Die extrahierte src-URL ist signiert und läuft ab (Query-Parameter
-//    "oe" ist ein Hex-Timestamp) – vermutlich nach wenigen Stunden gültig.
-//    Diese Funktion MUSS deshalb bei jedem Abspielen neu aufgerufen werden
-//    (siehe GET .../instagram-media in server.js) und darf NIE in
-//    playlist_items oder sonst irgendwo dauerhaft gespeichert werden.
-//
-// 2. Anders als der oEmbed-Aufruf in resolveInstagram() (ein von Meta für
-//    Fremdseiten-Embedding vorgesehenes Produkt) ist das hier das Auslesen
-//    einer öffentlichen, aber undokumentierten HTML-Seite (gleiches Muster/
-//    Risiko wie spotifyResolver.js) UND das direkte Ausliefern des rohen
-//    Videofiles unter Umgehung von Instagrams eigener Player-UI – ein
-//    größeres ToS-Risiko als alles sonst in diesem Projekt. Kann jederzeit
-//    ohne Ankündigung brechen (Seitenstruktur) oder von Instagram unterbunden
-//    werden.
-//
-// Funktioniert nur für Video-Posts/Reels – reine Bild-/Karussell-Posts haben
-// kein <video>-Tag (siehe Fehlerfall unten).
-async function fetchInstagramEmbedMedia(providerUri) {
-  const [type, shortcode] = String(providerUri || '').split(':');
-  if (!type || !shortcode) {
-    throw new Error('Ungültige Instagram-Referenz (provider_uri)');
-  }
-
-  const embedUrl = `https://www.instagram.com/${type}/${shortcode}/embed/`;
-  let res;
-  try {
-    res = await fetch(embedUrl, { headers: { 'User-Agent': EMBED_UA, Accept: 'text/html' } });
-  } catch {
-    throw new Error('Instagram war nicht erreichbar');
-  }
-  if (!res.ok) {
-    throw new Error(
-      `Instagram antwortete mit ${res.status} (Post gelöscht, privat gestellt oder nicht mehr abrufbar)`
-    );
-  }
-
-  const html = await res.text();
-  const videoTagMatch = html.match(/<video\b[^>]*>/i);
-  if (!videoTagMatch) {
-    throw new Error('Kein Video in diesem Instagram-Post gefunden (evtl. ein reiner Bild-/Karussell-Post)');
-  }
-  const videoTag = videoTagMatch[0];
-
-  const srcMatch = videoTag.match(/\bsrc="([^"]+)"/i);
-  if (!srcMatch) {
-    throw new Error('Konnte keine Video-URL aus dem Instagram-Embed extrahieren (Seitenstruktur hat sich vermutlich geändert)');
-  }
-  const posterMatch = videoTag.match(/\bposter="([^"]+)"/i);
-
-  return {
-    videoUrl: unescapeHtml(srcMatch[1]),
-    posterUrl: posterMatch ? unescapeHtml(posterMatch[1]) : null,
-  };
-}
-
-module.exports = { resolveInstagram, looksLikeInstagramUrl, fetchInstagramEmbedMedia };
+module.exports = { resolveInstagram, looksLikeInstagramUrl };
