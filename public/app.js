@@ -328,33 +328,6 @@
     );
   }
 
-  // ---------- Hinweise (Toast) ----------
-  //
-  // Einheitlicher, nicht-blockierender Weg für Fehlermeldungen von Aktionen
-  // ohne eigenes Formular-Fehlerfeld (Antworten, Reaktionen, Löschen,
-  // Notizen, ...) statt alert(). Hängt sich im Vollbild an das Vollbild-
-  // Element, damit der Hinweis dort sichtbar bleibt.
-  function showToast(message, type = 'error') {
-    const host = getFullscreenElement() || document.body;
-    let container = host.querySelector(':scope > .toast-container');
-    if (!container) {
-      container = document.createElement('div');
-      container.className = 'toast-container';
-      container.setAttribute('role', 'status');
-      container.setAttribute('aria-live', 'polite');
-      host.appendChild(container);
-    }
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    requestAnimationFrame(() => toast.classList.add('show'));
-    setTimeout(() => {
-      toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
-    }, 5000);
-  }
-
   // Deterministische Farbe pro Anzeigename, damit jede Person im Thread
   // visuell wiedererkennbar ist (gleicher Name -> gleiche Farbe). Dient als
   // Fallback für Kommentare ohne selbst gewählte Farbe (siehe
@@ -493,7 +466,7 @@
           await setCommentRead(comment, !isCommentRead(comment, authorName), authorName);
         } catch (err) {
           console.error('Gelesen-Status konnte nicht gespeichert werden:', err);
-          showToast('Gelesen-Status konnte nicht gespeichert werden: ' + err.message);
+          alert('Gelesen-Status konnte nicht gespeichert werden: ' + err.message);
         }
         btn.disabled = false;
         refresh();
@@ -624,7 +597,7 @@
         lastKnownText = linesToText(lines);
       } catch (err) {
         console.error('Notizen konnten nicht gespeichert werden:', err);
-        showToast('Notizen konnten nicht gespeichert werden: ' + err.message);
+        alert('Notizen konnten nicht gespeichert werden: ' + err.message);
       }
     }
 
@@ -1800,16 +1773,16 @@
 
     // ---------- Playlist-Sortierung nach Hinzufüge-Datum ----------
     //
-    // Regelt nur die Anzeige-Reihenfolge der Playlist-Leiste ("älteste" bzw.
-    // "neueste zuerst"). Standard ist "älteste zuerst", weil das der
-    // Wiedergabereihenfolge entspricht: currentIndex (Vor/Zurück, Start mit
-    // dem ersten Eintrag) bleibt an der Playlist-Position.
+    // Regelt die Reihenfolge der Playlist-Leiste ("neueste" bzw. "älteste
+    // zuerst", Standard: neueste) – und damit auch die Wiedergabe-
+    // reihenfolge: Start, Vor/Zurück und automatisches Weiterspielen folgen
+    // immer der angezeigten Sortierung (siehe playlistDisplayOrder).
 
-    let playlistSortOrder = localStorage.getItem(PLAYLIST_SORT_KEY) === 'desc' ? 'desc' : 'asc';
+    let playlistSortOrder = localStorage.getItem(PLAYLIST_SORT_KEY) === 'asc' ? 'asc' : 'desc';
 
     function updatePlaylistSortUI() {
       if (!playlistSortToggle) return;
-      playlistSortToggle.checked = playlistSortOrder === 'desc';
+      playlistSortToggle.checked = playlistSortOrder === 'asc';
       playlistSortOptions.forEach((opt) => opt.classList.toggle('active', opt.dataset.value === playlistSortOrder));
     }
     updatePlaylistSortUI();
@@ -1820,11 +1793,12 @@
       localStorage.setItem(PLAYLIST_SORT_KEY, playlistSortOrder);
       updatePlaylistSortUI();
       renderPlaylist();
+      renderComments();
     }
 
     if (playlistSortToggle) {
       playlistSortToggle.addEventListener('change', () =>
-        setPlaylistSortOrder(playlistSortToggle.checked ? 'desc' : 'asc')
+        setPlaylistSortOrder(playlistSortToggle.checked ? 'asc' : 'desc')
       );
       // preventDefault: sonst schaltet der Klick auf den Text zusätzlich die
       // Checkbox im umschließenden <label> um und hebt die Wahl wieder auf.
@@ -2031,7 +2005,7 @@
         await apiFetch(`api/streams/${streamId}`, { method: 'DELETE', headers: adminHeaders() });
         location.href = '.';
       } catch (err) {
-        showToast('Löschen fehlgeschlagen: ' + err.message);
+        alert('Löschen fehlgeschlagen: ' + err.message);
       }
     });
 
@@ -2130,7 +2104,7 @@
         updatePremiumBannerVisibility();
         commentHereBtn.disabled = playlist.length === 0;
         if (hadNoItemsYet && playlist.length > 0) {
-          loadItemIntoPlayer(0, false);
+          loadItemIntoPlayer(playlistDisplayOrder()[0], false);
         } else if (playlist.length === 0) {
           updateNowPlaying(null);
           updatePosDisplayVisibility(null);
@@ -2270,7 +2244,7 @@
       nowPlayingEl?.classList.toggle('hidden', isSpotify);
       if (isSpotify) return;
 
-      nowPlayingTitle.textContent = item ? item.title : 'Noch keine Playlist-Einträge';
+      nowPlayingTitle.textContent = item ? item.title : 'Noch keine Playlist-Elemente';
       nowPlayingArtist.textContent = item ? item.artist_or_channel || '' : '';
       if (item && item.thumbnail_url) {
         nowPlayingThumb.src = item.thumbnail_url;
@@ -2737,8 +2711,9 @@
     }
 
     function handleItemEnded() {
-      if (currentIndex + 1 < playlist.length) {
-        loadItemIntoPlayer(currentIndex + 1, true);
+      const nextIndex = neighborIndex(1);
+      if (nextIndex !== -1) {
+        loadItemIntoPlayer(nextIndex, true);
       } else {
         isPlaying = false;
         updatePlayPauseIcon();
@@ -2853,10 +2828,12 @@
     });
 
     prevItemBtn.addEventListener('click', () => {
-      if (currentIndex > 0) loadItemIntoPlayer(currentIndex - 1, true);
+      const prev = neighborIndex(-1);
+      if (prev !== -1) loadItemIntoPlayer(prev, true);
     });
     nextItemBtn.addEventListener('click', () => {
-      if (currentIndex + 1 < playlist.length) loadItemIntoPlayer(currentIndex + 1, true);
+      const next = neighborIndex(1);
+      if (next !== -1) loadItemIntoPlayer(next, true);
     });
 
     // ---------- Vollbild-/Theater-Modus ----------
@@ -3043,9 +3020,33 @@
 
     // ---------- Playlist rendern ----------
 
+    // Playlist-Indizes in der angezeigten Reihenfolge (siehe
+    // playlistSortOrder). Wiedergabe-Navigation (Start, Vor/Zurück,
+    // automatisches Weiterspielen) folgt genau dieser Reihenfolge, damit
+    // "Nächstes" immer der Eintrag unter dem aktuellen in der Liste ist.
+    function playlistDisplayOrder() {
+      const dir = playlistSortOrder === 'asc' ? 1 : -1;
+      return playlist
+        .map((item, index) => index)
+        .sort((a, b) => {
+          const diff = (playlist[a].added_at || 0) - (playlist[b].added_at || 0);
+          return dir * (diff || a - b);
+        });
+    }
+
+    // Playlist-Index des Nachbarn (delta = -1 / +1) des aktuellen Eintrags
+    // in der angezeigten Reihenfolge, oder -1, wenn es keinen gibt.
+    function neighborIndex(delta) {
+      const order = playlistDisplayOrder();
+      const pos = order.indexOf(currentIndex);
+      if (pos === -1) return -1;
+      const next = order[pos + delta];
+      return next === undefined ? -1 : next;
+    }
+
     function updatePrevNextDisabled() {
-      prevItemBtn.disabled = currentIndex <= 0;
-      nextItemBtn.disabled = currentIndex < 0 || currentIndex >= playlist.length - 1;
+      prevItemBtn.disabled = neighborIndex(-1) === -1;
+      nextItemBtn.disabled = neighborIndex(1) === -1;
     }
 
     function highlightCurrentPlaylistItem() {
@@ -3073,7 +3074,7 @@
       updatePrevNextDisabled();
       playlistListEl.innerHTML = '';
       if (playlist.length === 0) {
-        playlistListEl.innerHTML = '<p class="empty-state">Noch keine Playlist-Einträge – füge oben eine Quelle hinzu.</p>';
+        playlistListEl.innerHTML = '<p class="empty-state">Noch keine Playlist-Elemente – füge oben eine Quelle hinzu.</p>';
         return;
       }
       // Nach Hinzufüge-Datum sortieren (playlistSortOrder, Standard: neueste
@@ -3081,13 +3082,7 @@
       // Playlist-Position als Tiebreaker. currentIndex/Wiedergabereihenfolge
       // bleiben davon unberührt, da row.dataset.index weiterhin den echten
       // Array-Index trägt.
-      const dir = playlistSortOrder === 'asc' ? 1 : -1;
-      const order = playlist
-        .map((item, index) => index)
-        .sort((a, b) => {
-          const diff = (playlist[a].added_at || 0) - (playlist[b].added_at || 0);
-          return dir * (diff || a - b);
-        });
+      const order = playlistDisplayOrder();
       for (const index of order) {
         const item = playlist[index];
         const row = document.createElement('div');
@@ -3104,11 +3099,7 @@
             <span class="playlist-item-artist"></span>
           </span>
           <span class="playlist-item-provider"></span>
-          ${
-            adminToken
-              ? '<button type="button" class="playlist-item-remove" aria-label="Aus der Playlist entfernen" title="Aus der Playlist entfernen">×</button>'
-              : ''
-          }
+          <button type="button" class="playlist-item-remove" aria-label="Aus der Playlist entfernen" title="Aus der Playlist entfernen">×</button>
         `;
         // Anbieter-Icon: verlinkt auf das Original, sofern eine Quell-URL
         // bekannt ist (per DOM-Property statt HTML-String gesetzt, da
@@ -3136,12 +3127,12 @@
         });
         row.querySelector('.playlist-item-remove')?.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm('Diesen Eintrag aus der Playlist entfernen?')) return;
+          if (!confirm('Dieses Element aus der Playlist entfernen?')) return;
           try {
             await apiFetch(`api/items/${item.id}`, { method: 'DELETE', headers: accessHeaders() });
             await loadItems();
           } catch (err) {
-            showToast('Entfernen fehlgeschlagen: ' + err.message);
+            alert('Entfernen fehlgeschlagen: ' + err.message);
           }
         });
         playlistListEl.appendChild(row);
@@ -3402,8 +3393,7 @@
         commentImageAttach.reset(null);
         closeAllEmojiFlyouts();
       } catch (err) {
-        commentErrorEl.textContent = err.message;
-        commentErrorEl.classList.remove('hidden');
+        alert('Kommentar konnte nicht gesendet werden: ' + err.message);
       }
     });
 
@@ -3467,7 +3457,7 @@
         fsCommentInput.value = '';
         fsPendingTimecode = null;
       } catch (err) {
-        showToast('Kommentar konnte nicht gesendet werden: ' + err.message);
+        alert('Kommentar konnte nicht gesendet werden: ' + err.message);
       }
     }
     fsCommentSubmitBtn?.addEventListener('click', submitFsComment);
@@ -3535,7 +3525,7 @@
 
     function itemLabel(itemId) {
       const item = playlist.find((it) => it.id === itemId);
-      return item ? item.title : '(gelöschter Eintrag)';
+      return item ? item.title : '(gelöschtes Element)';
     }
 
     async function submitMixReply(parentId, body, formEl, image) {
@@ -3651,7 +3641,7 @@
           if (idx !== -1) comment.reactions.splice(idx, 1);
         }
         refreshReactionsUI(comment);
-        showToast('Reaktion konnte nicht gesetzt werden: ' + err.message);
+        alert('Reaktion konnte nicht gesetzt werden: ' + err.message);
       }
     }
 
@@ -3747,7 +3737,7 @@
         comments.push(...removed);
         renderComments();
         renderMarkers();
-        showToast('Löschen fehlgeschlagen: ' + err.message);
+        alert('Löschen fehlgeschlagen: ' + err.message);
       }
     }
 
@@ -3797,12 +3787,12 @@
             el.querySelector(':scope > .comment-head > .edit-toggle')?.remove();
             el.querySelector(':scope > .comment-head > .delete-btn')?.remove();
             form.remove();
-            showToast(
+            alert(
               'Dieser Kommentar lässt sich mit dem aktuellen Anzeigenamen nicht mehr ' +
                 'bearbeiten (Name stimmt nicht mehr mit dem des Kommentars überein).'
             );
           } else {
-            showToast('Bearbeiten fehlgeschlagen: ' + err.message);
+            alert('Bearbeiten fehlgeschlagen: ' + err.message);
           }
         }
       });
@@ -3957,7 +3947,7 @@
           await submitMixReply(c.id, body, replyForm, image);
           replyImageAttach.reset(null);
         } catch (err) {
-          showToast('Antwort konnte nicht gesendet werden: ' + err.message);
+          alert('Antwort konnte nicht gesendet werden: ' + err.message);
         }
       });
 
@@ -4008,7 +3998,9 @@
         if (!groups.has(c.item_id)) groups.set(c.item_id, []);
         groups.get(c.item_id).push(c);
       });
-      const orderedItemIds = playlist.map((it) => it.id).filter((id) => groups.has(id));
+      const orderedItemIds = playlistDisplayOrder()
+        .map((idx) => playlist[idx].id)
+        .filter((id) => groups.has(id));
       Array.from(groups.keys()).forEach((id) => {
         if (!orderedItemIds.includes(id)) orderedItemIds.push(id);
       });
@@ -4031,7 +4023,7 @@
           header.disabled = !item;
           header.innerHTML = `<span class="comment-group-icon"></span><span class="comment-group-title"></span>`;
           header.querySelector('.comment-group-icon').textContent = item ? playlistItemIcon(item.provider) : '❔';
-          header.querySelector('.comment-group-title').textContent = item ? item.title : '(gelöschter Eintrag)';
+          header.querySelector('.comment-group-title').textContent = item ? item.title : '(gelöschtes Element)';
           if (item) {
             header.addEventListener('click', () => {
               const idx = playlist.findIndex((it) => it.id === itemId);
@@ -4097,7 +4089,7 @@
           const providerIcons = (s.providers || []).map(playlistItemIcon).join(' ');
           row.innerHTML = `
             <span class="stream-list-title">${lock}${escapeHtml(s.title)}</span>
-            <span class="stream-list-meta">${providerIcons ? `${providerIcons} · ` : ''}${s.item_count} ${s.item_count === 1 ? 'Eintrag' : 'Einträge'}</span>
+            <span class="stream-list-meta">${providerIcons ? `${providerIcons} · ` : ''}${s.item_count} ${s.item_count === 1 ? 'Element' : 'Elemente'}</span>
             <span class="stream-list-date">${formatDate(s.created_at)}</span>
           `;
           listEl.appendChild(row);

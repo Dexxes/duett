@@ -400,18 +400,18 @@ function isValidSlug(str) {
 
 function sanitizeClientItem(raw) {
   if (!raw || typeof raw !== 'object') {
-    throw new Error('Ungültiger Playlist-Eintrag');
+    throw new Error('Ungültiges Playlist-Element');
   }
   const { provider, provider_uri, title, artist_or_channel, duration_ms, thumbnail_url } = raw;
 
   if (provider !== 'youtube') {
-    throw new Error('Nur clientseitig aufgelöste YouTube-Einträge sind hier erlaubt');
+    throw new Error('Nur clientseitig aufgelöste YouTube-Elemente sind hier erlaubt');
   }
   if (typeof provider_uri !== 'string' || !provider_uri.trim() || provider_uri.length > MAX_ITEM_URI_LEN) {
     throw new Error('provider_uri fehlt oder zu lang');
   }
   if (typeof title !== 'string' || !title.trim() || title.length > MAX_ITEM_TITLE_LEN) {
-    throw new Error('Titel des Eintrags fehlt oder ist zu lang');
+    throw new Error('Titel des Elements fehlt oder ist zu lang');
   }
 
   return {
@@ -467,7 +467,7 @@ function isArdMediathekUrl(rawUrl) {
 async function resolveSourceToItems(url, items) {
   if (Array.isArray(items) && items.length > 0) {
     if (items.length > MAX_CLIENT_ITEMS_PER_REQUEST) {
-      throw new Error(`Zu viele Einträge auf einmal (max. ${MAX_CLIENT_ITEMS_PER_REQUEST})`);
+      throw new Error(`Zu viele Elemente auf einmal (max. ${MAX_CLIENT_ITEMS_PER_REQUEST})`);
     }
     return items.map(sanitizeClientItem);
   }
@@ -1407,7 +1407,7 @@ app.post('/api/streams/:id/items', writeLimiter, async (req, res) => {
 app.delete('/api/items/:iid', writeLimiter, (req, res) => {
   const item = db.prepare('SELECT id, stream_id FROM playlist_items WHERE id = ?').get(req.params.iid);
   if (!item) {
-    return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+    return res.status(404).json({ error: 'Element nicht gefunden' });
   }
   const stream = db
     .prepare('SELECT id, admin_token, password_hash FROM streams WHERE id = ?')
@@ -1415,10 +1415,9 @@ app.delete('/api/items/:iid', writeLimiter, (req, res) => {
   if (!stream) {
     return res.status(404).json({ error: 'Session nicht gefunden' });
   }
-  // Entfernen von Playlist-Einträgen ist (wie Löschen der Session und
-  // fremder Kommentare) dem Admin-Link vorbehalten – so steht es auch im
-  // Admin-Banner und beim Anlegen der Session.
-  if (!requireAdmin(req, res, stream.id)) return;
+  // Entfernen von Playlist-Elementen ist (wie das Hinzufügen) für alle mit
+  // Zugriff auf die Session erlaubt, nicht nur mit dem Admin-Link.
+  if (!checkStreamAccess(req, res, stream)) return;
 
   db.prepare('DELETE FROM playlist_items WHERE id = ?').run(item.id);
   res.json({ ok: true });
@@ -1437,7 +1436,7 @@ app.post('/api/items/:iid/refresh', writeLimiter, async (req, res) => {
     .prepare('SELECT id, stream_id, provider, source_url FROM playlist_items WHERE id = ?')
     .get(req.params.iid);
   if (!item) {
-    return res.status(404).json({ error: 'Eintrag nicht gefunden' });
+    return res.status(404).json({ error: 'Element nicht gefunden' });
   }
   const stream = db
     .prepare('SELECT id, admin_token, password_hash FROM streams WHERE id = ?')
@@ -1448,7 +1447,7 @@ app.post('/api/items/:iid/refresh', writeLimiter, async (req, res) => {
   if (!checkStreamAccess(req, res, stream)) return;
 
   if (item.provider !== 'ard' || !item.source_url) {
-    return res.status(400).json({ error: 'Für diesen Eintrag gibt es keine Quelle zum Neuauflösen' });
+    return res.status(400).json({ error: 'Für dieses Element gibt es keine Quelle zum Neuauflösen' });
   }
 
   try {
@@ -1591,7 +1590,7 @@ app.post('/api/streams/:id/comments', writeLimiter, (req, res) => {
       .prepare('SELECT id, provider FROM playlist_items WHERE id = ? AND stream_id = ?')
       .get(itemIdValue, req.params.id);
     if (!item) {
-      return res.status(400).json({ error: 'Playlist-Eintrag nicht gefunden' });
+      return res.status(400).json({ error: 'Playlist-Element nicht gefunden' });
     }
     if (item.provider === 'instagram') {
       // Instagrams embed.js liefert keine Positions-/Ende-Rückmeldung (siehe

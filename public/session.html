@@ -21,7 +21,7 @@
     </header>
 
     <div id="admin-banner" class="admin-banner hidden">
-      Admin-Modus aktiv – du kannst Playlist-Einträge, Kommentare und diese Session löschen.
+      Admin-Modus aktiv – du kannst alle Kommentare und diese Session löschen.
       <button type="button" id="delete-stream-btn" class="danger">Session löschen</button>
     </div>
 
@@ -153,7 +153,7 @@
 
           <form id="comment-form" class="hidden">
             <div id="comment-timecode-field">
-              <label for="comment-timecode">Zeitpunkt im aktuellen Eintrag</label>
+              <label for="comment-timecode">Zeitpunkt im aktuellen Element</label>
               <input type="text" id="comment-timecode" inputmode="decimal" placeholder="z. B. 1:30" required>
             </div>
 
@@ -176,12 +176,12 @@
           <div class="playlist-header">
             <h2>Playlist</h2>
             <label class="sort-switch">
-              <span class="sort-switch-option" data-value="asc">Älteste zuerst</span>
+              <span class="sort-switch-option" data-value="desc">Neueste zuerst</span>
               <span class="sort-switch-track">
                 <input type="checkbox" id="playlist-sort-toggle" class="sort-switch-input" aria-label="Playlist nach Hinzufüge-Datum sortieren">
                 <span class="sort-switch-thumb"></span>
               </span>
-              <span class="sort-switch-option" data-value="desc">Neueste zuerst</span>
+              <span class="sort-switch-option" data-value="asc">Älteste zuerst</span>
             </label>
           </div>
           <form id="add-item-form" class="add-item-form">
