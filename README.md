@@ -297,3 +297,21 @@ Duett/
   .dockerignore
   data/app.db          SQLite-Datei (persistent per Docker-Volume)
 ```
+
+## Lizenz
+
+Copyright (C) 2026 Julian von Bülow
+
+Duett ist freie Software: Sie können es unter den Bedingungen der
+[GNU Affero General Public License](LICENSE), wie von der Free Software
+Foundation veröffentlicht, weitergeben und/oder modifizieren, entweder gemäß
+Version 3 der Lizenz oder (nach Ihrer Wahl) jeder späteren Version
+(SPDX: `AGPL-3.0-or-later`).
+
+Wichtig für den Betrieb: Wer eine **veränderte** Version von Duett als
+Netzwerkdienst für andere bereitstellt, muss deren Nutzer:innen den
+Quellcode dieser Version zugänglich machen (§ 13 AGPL).
+
+Die verwendeten Abhängigkeiten (u. a. Express, better-sqlite3, bcryptjs,
+nanoid, hls.js) stehen unter eigenen, mit der AGPL kompatiblen Lizenzen
+(MIT, ISC, BSD, Apache-2.0).
