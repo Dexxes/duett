@@ -18,17 +18,40 @@
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-const SHORT_LINK_SUBDOMAIN_RE = /^https?:\/\/(vm|vt|pro)\.tiktok\.com\//i;
-const SHORT_LINK_PATH_RE = /tiktok\.com\/t\//i;
+const SHORT_LINK_SUBDOMAINS = new Set(['vm.tiktok.com', 'vt.tiktok.com', 'pro.tiktok.com']);
 const VIDEO_ID_RE = /\/video\/(\d+)/;
 const MAX_REDIRECTS = 5;
 
+// Parst die Eingabe als http(s)-URL und prüft, dass der Host wirklich
+// tiktok.com (oder eine Subdomain davon) ist. Ein bloßer Teilstring-Test auf
+// "tiktok.com/" würde z. B. auch "http://127.0.0.1/?x=tiktok.com/t/a"
+// akzeptieren – der Server würde dann beim Kurzlink-Auflösen beliebige
+// (auch interne) Adressen abrufen (SSRF).
+function parseTikTokUrl(input) {
+  let raw = (input || '').trim();
+  // Ohne Schema eingefügte Links ("www.tiktok.com/…", "vm.tiktok.com/…")
+  // wie bisher akzeptieren.
+  if (raw && !/^[a-z][a-z0-9+.-]*:/i.test(raw)) raw = 'https://' + raw;
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+  const host = parsed.hostname.toLowerCase();
+  if (host !== 'tiktok.com' && !host.endsWith('.tiktok.com')) return null;
+  return parsed;
+}
+
 function looksLikeTikTokUrl(input) {
-  return /tiktok\.com\//i.test((input || '').trim());
+  return !!parseTikTokUrl(input);
 }
 
 function isShortTikTokLink(input) {
-  return SHORT_LINK_SUBDOMAIN_RE.test(input) || SHORT_LINK_PATH_RE.test(input);
+  const parsed = parseTikTokUrl(input);
+  if (!parsed) return false;
+  return SHORT_LINK_SUBDOMAINS.has(parsed.hostname.toLowerCase()) || /^\/t\//i.test(parsed.pathname);
 }
 
 // Folgt Kurzlink-Redirects manuell (statt automatisch), um die Kette auf
@@ -50,6 +73,10 @@ async function resolveShortLink(startUrl) {
     const location = res.headers.get('location');
     if (res.status >= 300 && res.status < 400 && location) {
       current = new URL(location, current).toString();
+      // Redirects nur innerhalb von tiktok.com folgen (siehe parseTikTokUrl).
+      if (!parseTikTokUrl(current)) {
+        throw new Error('TikTok-Kurzlink leitet auf eine fremde Adresse weiter');
+      }
       if (VIDEO_ID_RE.test(current)) return current;
       continue;
     }
@@ -92,7 +119,8 @@ async function resolveTikTok(input) {
     throw new Error('Das ist kein erkennbarer TikTok-Link');
   }
 
-  const canonicalUrl = isShortTikTokLink(input) ? await resolveShortLink(input) : input;
+  const normalized = parseTikTokUrl(input).toString();
+  const canonicalUrl = isShortTikTokLink(normalized) ? await resolveShortLink(normalized) : normalized;
   const data = await fetchOEmbed(canonicalUrl);
 
   // Video-ID bevorzugt aus der oEmbed-Antwort (embed_product_id, verifiziert

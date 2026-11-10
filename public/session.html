@@ -4,7 +4,14 @@
 <meta charset="UTF-8">
 <base href="__BASE_HREF__">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Duett – Session</title>
+<title>Session – Duett</title>
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32x32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="favicon-16x16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<meta name="theme-color" content="#0f1115">
 <link rel="stylesheet" href="style.css">
 </head>
 <body data-stream-id="">
@@ -21,7 +28,7 @@
     </header>
 
     <div id="admin-banner" class="admin-banner hidden">
-      Admin-Modus aktiv – du kannst Items, Kommentare und diese Session löschen.
+      Admin-Modus aktiv – du kannst alle Kommentare und diese Session löschen.
       <button type="button" id="delete-stream-btn" class="danger">Session löschen</button>
     </div>
 
@@ -29,7 +36,7 @@
       <h2>Zugriffsschutz</h2>
       <p id="admin-password-status" class="field-hint"></p>
       <form id="admin-password-form">
-        <label for="admin-password-input">Neues Passwort setzen (leer lassen zum Entfernen)</label>
+        <label for="admin-password-input">Neues Passwort setzen (mind. 4 Zeichen, leer lassen zum Entfernen)</label>
         <input type="password" id="admin-password-input" placeholder="Passwort" maxlength="200" autocomplete="new-password">
         <div class="form-actions">
           <button type="submit">Speichern</button>
@@ -126,7 +133,7 @@
                   <button type="button" class="seek-btn" id="next-comment-btn" aria-label="Nächster Kommentar" title="Nächster Kommentar">⏭ 💬 Nächster Kommentar</button>
                 </div>
                 <div class="jump-to">
-                  <input type="text" id="jump-input" placeholder="Timecode">
+                  <input type="text" id="jump-input" placeholder="z. B. 1:30" aria-label="Zu Zeitpunkt springen">
                   <button type="button" id="jump-btn">Springen</button>
                 </div>
               </div>
@@ -140,8 +147,10 @@
                 <input type="text" id="fs-comment-input" placeholder="Kommentar an aktueller Stelle …" maxlength="2000">
                 <button type="button" class="seek-btn" id="fs-comment-submit">Senden</button>
               </div>
-              <span id="mix-pos-display" class="mix-pos-display">0:00 / 0:00</span>
-              <button type="button" class="seek-btn icon-btn icobtn" id="fullscreen-btn" aria-label="Vollbild" title="Vollbild">⛶</button>
+              <div class="pos-row">
+                <span id="mix-pos-display" class="mix-pos-display">0:00 / 0:00</span>
+                <button type="button" class="seek-btn icon-btn icobtn" id="fullscreen-btn" aria-label="Vollbild" title="Vollbild">⛶</button>
+              </div>
             </div>
           </div>
         </div>
@@ -151,21 +160,19 @@
 
           <form id="comment-form" class="hidden">
             <div id="comment-timecode-field">
-              <label for="comment-timecode">Zeitpunkt (Sek. im aktuellen Titel)</label>
-              <input type="number" id="comment-timecode" min="0" step="0.1" required>
+              <label for="comment-timecode">Zeitpunkt im aktuellen Element</label>
+              <input type="text" id="comment-timecode" inputmode="decimal" placeholder="z. B. 1:30" required>
             </div>
 
             <label for="comment-body">Kommentar</label>
             <div class="comment-body-wrap">
               <textarea id="comment-body" maxlength="2000" rows="3" placeholder="Was fällt dir hier auf?"></textarea>
-              <button type="button" id="emoji-btn" class="emoji-btn" aria-label="Emoji einfügen" aria-haspopup="true" aria-expanded="false">😀</button>
-              <div id="emoji-flyout" class="emoji-flyout hidden" role="menu" aria-label="Emoji-Auswahl"></div>
             </div>
 
             <div id="comment-image-attach"></div>
 
             <div class="form-actions">
-              <button type="submit">Absenden</button>
+              <button type="submit">Senden</button>
               <button type="button" id="comment-cancel-btn" class="secondary">Abbrechen</button>
             </div>
           </form>
@@ -214,7 +221,7 @@
             <label class="sort-switch">
               <span class="sort-switch-option" data-value="asc">Früh zuerst</span>
               <span class="sort-switch-track">
-                <input type="checkbox" id="sort-toggle" class="sort-switch-input">
+                <input type="checkbox" id="sort-toggle" class="sort-switch-input" aria-label="Kommentare nach Zeitpunkt sortieren">
                 <span class="sort-switch-thumb"></span>
               </span>
               <span class="sort-switch-option" data-value="desc">Spät zuerst</span>
@@ -232,6 +239,7 @@
       <p>Dein Name wird nur in diesem Browser gespeichert und bei deinen Kommentaren angezeigt.</p>
       <form id="name-modal-form">
         <input type="text" id="name-modal-input" maxlength="60" placeholder="Dein Name">
+        <p id="name-modal-error" class="error hidden">Bitte gib einen Namen ein</p>
         <p class="field-hint" id="name-modal-color-hint">Deine Farbe (wird anderen angezeigt)</p>
         <div id="color-swatches" class="color-swatches" role="radiogroup" aria-label="Deine Farbe"></div>
         <button type="submit">Los geht's</button>
