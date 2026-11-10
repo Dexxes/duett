@@ -1162,14 +1162,67 @@
     });
   }
 
+  // ---------- #-Timestamps: Zeitpunkte im Kommentartext verlinken ----------
+  //
+  // "#1:20" bzw. "#1:02:05" wird zu einem In-App-Sprung an diese Stelle.
+  // Bewusst nur mit Doppelpunkt (kein "#90"), damit z. B. "Platz #1" normaler
+  // Text bleibt. "#" muss – wie "@" bei den Mentions – am Zeilenanfang oder
+  // nach Leerzeichen/"(" stehen; dadurch matchen weder "&#39;" (escapeHtml)
+  // noch URL-Fragmente.
+  //
+  // Zugehöriges Element: Steht direkt davor eine @-Mention ("@Titel #1:20"),
+  // gilt der Zeitpunkt für dieses Element, sonst für das Element, zu dem der
+  // Kommentarstrang gehört (originItemId). Läuft deshalb NACH linkifyMentions
+  // und erkennt die dort erzeugten Links am festen Markup.
+  const TIMESTAMP_PATTERN = '(?:\\d+:)?\\d{1,2}:\\d{2}';
+
+  function linkifyTimestamps(safeHtml, originItemId) {
+    const re = new RegExp(
+      `(^|[\\s(]|<a href="#" class="playlist-item-link" data-item-id="(\\d+)">[^<]*</a>\\s)#(${TIMESTAMP_PATTERN})(?=$|[\\s).,;:!?])`,
+      'g'
+    );
+    return safeHtml.replace(re, (match, prefix, mentionedId, time) => {
+      const sec = parseTimecode(time);
+      if (sec == null) return match;
+      const itemId = mentionedId || (originItemId != null ? String(originItemId) : '');
+      return `${prefix}<a href="#" class="timestamp-link" data-item-id="${itemId}" data-sec="${sec}" title="Zu ${time} springen">⏱ ${time}</a>`;
+    });
+  }
+
+  // Liefert die per "@Titel" im (rohen, unescapten) Text erwähnten
+  // Playlist-Items in Reihenfolge ihres ersten Auftretens – gleiche
+  // Erkennungsregeln wie linkifyMentions.
+  function findMentionedItems(text, playlistArr) {
+    if (!text || !Array.isArray(playlistArr)) return [];
+    const items = playlistArr.filter((it) => it && it.title).sort((a, b) => b.title.length - a.title.length);
+    if (items.length === 0) return [];
+    const byTitle = new Map();
+    items.forEach((it) => {
+      if (!byTitle.has(it.title)) byTitle.set(it.title, it);
+    });
+    const re = new RegExp(
+      `(^|[\\s(])@(${Array.from(byTitle.keys()).map(escapeRegExp).join('|')})(?=$|[\\s).,;:!?])`,
+      'g'
+    );
+    const found = [];
+    let m;
+    while ((m = re.exec(text))) {
+      const it = byTitle.get(m[2]);
+      if (it && !found.includes(it)) found.push(it);
+    }
+    return found;
+  }
+
   // Wandelt URLs in bereits escapetem HTML-Text in klickbare Links um.
   // Spotify-/YouTube-/TikTok-/Instagram- und Mediathek-
   // Links (ARD/ZDF/Arte/3sat), die sich einem bereits bekannten Playlist-Item
   // zuordnen lassen, werden statt als externer Link als In-App-Sprung zum
-  // Playlist-Item gerendert. Andere URLs werden zu normalen externen Links. @-Mentions (siehe linkifyMentions) werden
-  // zuerst aufgelöst.
-  function linkifyWithPlaylistRefs(safeHtml, playlistArr) {
-    const withMentions = linkifyMentions(safeHtml, playlistArr);
+  // Playlist-Item gerendert. Andere URLs werden zu normalen externen Links. @-Mentions (siehe linkifyMentions) und
+  // #-Timestamps (siehe linkifyTimestamps) werden zuerst aufgelöst.
+  // originItemId: Element, zu dem der Kommentarstrang gehört – Ziel für
+  // #-Timestamps ohne vorangestellte @-Mention (siehe linkifyTimestamps).
+  function linkifyWithPlaylistRefs(safeHtml, playlistArr, originItemId) {
+    const withMentions = linkifyTimestamps(linkifyMentions(safeHtml, playlistArr), originItemId);
     const urlRegex = /((https?:\/\/|www\.)[^\s<]+)/gi;
     return withMentions.replace(urlRegex, (match) => {
       let core = match;
@@ -1322,7 +1375,9 @@
   // eine Element, siehe wireMentionAutocomplete-Aufrufe weiter unten).
 
   let mentionDropdownEl = null;
-  let mentionDropdownState = null; // { textarea, atIndex, items, activeIndex }
+  // options: [{ label, insertion }] – insertion ersetzt den Text vom
+  // Auslöserzeichen ("@" bzw. "#", atIndex) bis zum Cursor.
+  let mentionDropdownState = null; // { textarea, atIndex, items: options, activeIndex, kind }
   let mentionScrollListenerAdded = false;
 
   function ensureMentionDropdown() {
@@ -1357,14 +1412,17 @@
     });
   }
 
-  function selectMentionItem(item) {
+  function selectMentionItem(option) {
     const state = mentionDropdownState;
-    if (!state || !item) return;
-    const { textarea, atIndex } = state;
+    if (!state || !option) return;
+    const { textarea, atIndex, kind } = state;
+    // Nach einer #-Auswahl soll das Menü für dieses "#" nicht erneut
+    // aufgehen, während man die Zeit noch weitertippt.
+    if (kind === 'timestamp') textarea._timestampDismissedAt = atIndex + option.insertion.lastIndexOf('#');
     const caret = textarea.selectionStart ?? textarea.value.length;
     const before = textarea.value.slice(0, atIndex);
     const after = textarea.value.slice(caret);
-    const insertion = `@${item.title} `;
+    const insertion = option.insertion;
     textarea.value = before + insertion + after;
     const newPos = before.length + insertion.length;
     textarea.setSelectionRange(newPos, newPos);
@@ -1372,15 +1430,21 @@
     textarea.focus();
   }
 
-  function renderMentionDropdown(textarea, atIndex, items) {
+  function renderMentionDropdown(textarea, atIndex, items, kind = 'mention') {
     const el = ensureMentionDropdown();
     el.innerHTML = '';
+    if (kind === 'timestamp') {
+      const head = document.createElement('div');
+      head.className = 'mention-autocomplete-heading';
+      head.textContent = 'Timestamp für …';
+      el.appendChild(head);
+    }
     items.forEach((item) => {
       const opt = document.createElement('button');
       opt.type = 'button';
       opt.className = 'mention-autocomplete-option';
       opt.setAttribute('role', 'option');
-      opt.textContent = `${playlistItemIcon(item.provider)} ${item.title}`;
+      opt.textContent = item.label;
       opt.addEventListener('mousedown', (e) => {
         // mousedown statt click: verhindert, dass der blur-Handler der
         // Textarea (siehe wireMentionAutocomplete) das Dropdown schon vor
@@ -1395,7 +1459,7 @@
     el.style.top = `${Math.round(rect.bottom + 4)}px`;
     el.style.width = `${Math.round(Math.min(Math.max(rect.width, 220), 360))}px`;
     el.classList.remove('hidden');
-    mentionDropdownState = { textarea, atIndex, items, activeIndex: 0 };
+    mentionDropdownState = { textarea, atIndex, items, activeIndex: 0, kind };
     updateMentionActiveOption();
   }
 
@@ -1415,27 +1479,100 @@
     return { atIndex, query };
   }
 
+  // Wie findMentionQuery, aber für "#": danach dürfen bisher nur Ziffern
+  // und Doppelpunkte getippt sein (eine angefangene Zeitangabe).
+  function findTimestampQuery(textarea) {
+    const caret = textarea.selectionStart ?? textarea.value.length;
+    const before = textarea.value.slice(0, caret);
+    const atIndex = before.lastIndexOf('#');
+    if (atIndex === -1) return null;
+    const precedingChar = atIndex > 0 ? before[atIndex - 1] : '';
+    if (precedingChar && !/[\s(]/.test(precedingChar)) return null;
+    const query = before.slice(atIndex + 1);
+    if (!/^[\d:]*$/.test(query)) return null;
+    return { atIndex, query, before: before.slice(0, atIndex) };
+  }
+
+  // Baut die Optionen des #-Menüs. ctx (siehe getTimestampContext in der
+  // Session-Seite): { playlist, originItemId, threadTexts, currentItemId,
+  // currentPositionSec }.
+  //
+  // Kandidaten sind das Element des Kommentarstrangs plus alle im Strang
+  // (inkl. Entwurf) per @ erwähnten Elemente. Bei mehr als einem Kandidaten
+  // wählt man hier, für welches Element der Timestamp gilt; für ein anderes
+  // als das Strang-Element wird "@Titel " davor eingefügt (so wird es auch
+  // beim Anzeigen zugeordnet, siehe linkifyTimestamps). Läuft ein Kandidat
+  // gerade im Player, wird zusätzlich die aktuelle Position angeboten.
+  function buildTimestampOptions(match, draftText, ctx) {
+    const playlistArr = (ctx && ctx.playlist) || [];
+    const origin = playlistArr.find((it) => it.id === ctx.originItemId) || null;
+    const candidates = origin ? [origin] : [];
+    findMentionedItems([...(ctx.threadTexts || []), draftText].join('\n'), playlistArr).forEach((it) => {
+      if (!candidates.includes(it)) candidates.push(it);
+    });
+
+    // Steht direkt vor dem "#" schon "@Titel ", ist das Element festgelegt.
+    const boundItem = candidates.find((it) => match.before.endsWith(`@${it.title} `));
+    const list = boundItem ? [boundItem] : candidates;
+    const choose = list.length > 1;
+    const options = [];
+    const label = (it) => `${playlistItemIcon(it.provider)} ${it.title}`;
+    const prefixFor = (it) => (boundItem || (origin && it.id === origin.id) ? '' : `@${it.title} `);
+
+    if (!match.query) {
+      list.forEach((it) => {
+        if (it.id !== ctx.currentItemId || it.provider === 'instagram') return;
+        const t = formatTime(ctx.currentPositionSec);
+        options.push({ label: `⏱ ${t} (aktuelle Stelle) · ${label(it)}`, insertion: `${prefixFor(it)}#${t} ` });
+      });
+    }
+    if (choose) {
+      list.forEach((it) => {
+        options.push({
+          label: match.query ? `#${match.query} · ${label(it)}` : `${label(it)} · Zeit selbst eingeben`,
+          insertion: `${prefixFor(it)}#${match.query}`,
+        });
+      });
+    }
+    return options;
+  }
+
   // Hängt die @-Mention-Autocomplete an eine Kommentar-Textarea an.
   // getPlaylistArr wird bei jedem Tastendruck neu aufgerufen (statt einmalig
   // die Playlist zu übergeben), damit auch nachträglich hinzugefügte Items
-  // sofort vorschlagbar sind.
-  function wireMentionAutocomplete(textarea, getPlaylistArr) {
+  // sofort vorschlagbar sind. getTimestampContext (optional) aktiviert
+  // zusätzlich das #-Menü (siehe buildTimestampOptions).
+  function wireMentionAutocomplete(textarea, getPlaylistArr, getTimestampContext) {
     if (!textarea) return;
     ensureMentionScrollListener();
 
+    function handleTimestampInput() {
+      if (!getTimestampContext) return false;
+      const match = findTimestampQuery(textarea);
+      if (!match) return false;
+      if (textarea._timestampDismissedAt === match.atIndex) return false;
+      const options = buildTimestampOptions(match, textarea.value, getTimestampContext() || {});
+      if (options.length === 0) return false;
+      renderMentionDropdown(textarea, match.atIndex, options, 'timestamp');
+      return true;
+    }
+
     function handleInput() {
+      const dismissed = textarea._timestampDismissedAt;
+      if (dismissed != null && textarea.value[dismissed] !== '#') textarea._timestampDismissedAt = null;
       const match = findMentionQuery(textarea);
       if (!match) {
-        closeMentionDropdown();
+        if (!handleTimestampInput()) closeMentionDropdown();
         return;
       }
       const playlistArr = getPlaylistArr() || [];
       const q = match.query.toLowerCase();
       const items = playlistArr
         .filter((it) => it && it.title && it.title.toLowerCase().includes(q))
-        .slice(0, 8);
+        .slice(0, 8)
+        .map((it) => ({ label: `${playlistItemIcon(it.provider)} ${it.title}`, insertion: `@${it.title} ` }));
       if (items.length === 0) {
-        closeMentionDropdown();
+        if (!handleTimestampInput()) closeMentionDropdown();
         return;
       }
       renderMentionDropdown(textarea, match.atIndex, items);
@@ -1478,6 +1615,7 @@
         } else if (e.key === 'Escape') {
           e.preventDefault();
           e.stopImmediatePropagation();
+          if (mentionDropdownState.kind === 'timestamp') textarea._timestampDismissedAt = mentionDropdownState.atIndex;
           closeMentionDropdown();
         }
       },
@@ -1736,7 +1874,7 @@
     const commentImageAttach = buildImageAttach(null);
     commentImageAttachHost?.appendChild(commentImageAttach.element);
     wirePasteImage(commentBodyInput, commentImageAttach);
-    wireMentionAutocomplete(commentBodyInput, () => playlist);
+    wireMentionAutocomplete(commentBodyInput, () => playlist, () => getTimestampContext(null));
     const commentList = document.getElementById('comment-list');
     const playlistListEl = document.getElementById('playlist-list');
     const addItemForm = document.getElementById('add-item-form');
@@ -1775,7 +1913,9 @@
     const fullscreenBtn = document.getElementById('fullscreen-btn');
     const speedSelect = document.getElementById('speed-select');
     const fsCommentInput = document.getElementById('fs-comment-input');
-    wireMentionAutocomplete(fsCommentInput, () => playlist);
+    wireMentionAutocomplete(fsCommentInput, () => playlist, () =>
+      getTimestampContext(fsReplyTarget ? fsReplyTarget.id : null)
+    );
     const fsCommentSubmitBtn = document.getElementById('fs-comment-submit');
     const fsReplyBadge = document.getElementById('fs-reply-badge');
     const fsReplyAuthorEl = document.getElementById('fs-reply-author');
@@ -3038,7 +3178,8 @@
       bubble.querySelector('.comment-bubble-author').textContent = c.author_name;
       bubble.querySelector('.comment-bubble-body').innerHTML = linkifyWithPlaylistRefs(
         escapeHtml(truncateForBubble(c.body)),
-        playlist
+        playlist,
+        threadOriginItemId(c)
       );
       bubble.querySelector('.comment-bubble-reply-btn').addEventListener('click', () => startFsReply(c));
       bubbleOverlay.appendChild(bubble);
@@ -3291,7 +3432,51 @@
       loadItemIntoPlayer(idx, true);
     }
 
+    // ---------- #-Timestamps: Strang-Kontext und Sprung ----------
+
+    // Element, zu dem der Strang eines Kommentars gehört (Antworten haben
+    // selbst kein item_id, sondern erben das ihres Hauptkommentars).
+    function threadOriginItemId(c) {
+      if (!c) return null;
+      if (c.parent_id == null) return c.item_id;
+      const parent = comments.find((p) => p.id === c.parent_id);
+      return parent ? parent.item_id : null;
+    }
+
+    // Kontext für das #-Menü (siehe buildTimestampOptions). commentId ist
+    // ein beliebiger Kommentar des Strangs (Hauptkommentar oder Antwort);
+    // null = neuer Hauptkommentar zum aktuell geladenen Element.
+    function getTimestampContext(commentId) {
+      const currentItem = playlist[currentIndex] || null;
+      const base = {
+        playlist,
+        currentItemId: currentItem ? currentItem.id : null,
+        currentPositionSec,
+      };
+      const c = commentId != null ? comments.find((x) => x.id === commentId) : null;
+      if (!c) return { ...base, originItemId: base.currentItemId, threadTexts: [] };
+      const rootId = c.parent_id == null ? c.id : c.parent_id;
+      const threadTexts = comments.filter((x) => x.id === rootId || x.parent_id === rootId).map((x) => x.body || '');
+      return { ...base, originItemId: threadOriginItemId(c), threadTexts };
+    }
+
+    function jumpToTimestamp(link) {
+      const sec = parseFloat(link.dataset.sec);
+      if (!Number.isFinite(sec)) return;
+      const itemId = link.dataset.itemId ? Number(link.dataset.itemId) : null;
+      const idx = itemId == null ? currentIndex : playlist.findIndex((it) => it.id === itemId);
+      if (idx === -1) return;
+      if (idx === currentIndex) seekCurrentTo(sec);
+      else loadItemIntoPlayer(idx, true, sec);
+    }
+
     commentList.addEventListener('click', (e) => {
+      const tsLink = e.target.closest('.timestamp-link');
+      if (tsLink) {
+        e.preventDefault();
+        jumpToTimestamp(tsLink);
+        return;
+      }
       const link = e.target.closest('.playlist-item-link');
       if (!link) return;
       e.preventDefault();
@@ -3299,6 +3484,12 @@
     });
 
     bubbleOverlay?.addEventListener('click', (e) => {
+      const tsLink = e.target.closest('.timestamp-link');
+      if (tsLink) {
+        e.preventDefault();
+        jumpToTimestamp(tsLink);
+        return;
+      }
       const link = e.target.closest('.playlist-item-link');
       if (!link) return;
       e.preventDefault();
@@ -3831,6 +4022,7 @@
       form.className = 'edit-form hidden';
       form.innerHTML = `
         <textarea class="edit-body" maxlength="2000" rows="3"></textarea>
+        <p class="field-hint comment-syntax-hint">Songs erwähnen mit @, Timestamps mit # (etwa #1:20)</p>
         <div class="edit-image-attach"></div>
         <div class="form-actions">
           <button type="submit">Speichern</button>
@@ -3843,7 +4035,7 @@
       form.querySelector('.edit-image-attach').appendChild(imageAttach.element);
       wirePasteImage(textarea, imageAttach);
       submitOnCtrlEnter(textarea, form);
-      wireMentionAutocomplete(textarea, () => playlist);
+      wireMentionAutocomplete(textarea, () => playlist, () => getTimestampContext(commentId));
       wireEmojiPicker(textarea);
 
       function openEdit() {
@@ -3904,7 +4096,7 @@
           ${canEdit ? '<button type="button" class="link-btn edit-toggle">bearbeiten</button>' : ''}
           ${canDelete ? '<button type="button" class="link-btn danger delete-btn">löschen</button>' : ''}
         </div>
-        <div class="comment-body">${linkifyWithPlaylistRefs(escapeHtml(r.body), playlist)}</div>
+        <div class="comment-body">${linkifyWithPlaylistRefs(escapeHtml(r.body), playlist, threadOriginItemId(r))}</div>
         ${r.image ? '<div class="comment-image-wrap"><img class="comment-image" alt="Bild im Kommentar"></div>' : ''}
       `;
       if (r.image) {
@@ -3940,12 +4132,13 @@
           ${canEdit ? '<button type="button" class="link-btn edit-toggle">bearbeiten</button>' : ''}
           ${canDelete ? '<button type="button" class="link-btn danger delete-btn">löschen</button>' : ''}
         </div>
-        <div class="comment-body">${linkifyWithPlaylistRefs(escapeHtml(c.body), playlist)}</div>
+        <div class="comment-body">${linkifyWithPlaylistRefs(escapeHtml(c.body), playlist, c.item_id)}</div>
         ${c.image ? '<div class="comment-image-wrap"><img class="comment-image" alt="Bild im Kommentar"></div>' : ''}
         <div class="replies"></div>
         <button type="button" class="link-btn reply-toggle">antworten</button>
         <form class="reply-form hidden">
           <textarea class="reply-body" maxlength="2000" rows="2" placeholder="Antwort …"></textarea>
+          <p class="field-hint comment-syntax-hint">Songs erwähnen mit @, Timestamps mit # (etwa #1:20)</p>
           <div class="reply-image-attach"></div>
           <div class="form-actions">
             <button type="submit">Senden</button>
@@ -4000,7 +4193,7 @@
       replyForm.querySelector('.reply-image-attach').appendChild(replyImageAttach.element);
       wirePasteImage(replyForm.querySelector('.reply-body'), replyImageAttach);
       submitOnCtrlEnter(replyForm.querySelector('.reply-body'), replyForm);
-      wireMentionAutocomplete(replyForm.querySelector('.reply-body'), () => playlist);
+      wireMentionAutocomplete(replyForm.querySelector('.reply-body'), () => playlist, () => getTimestampContext(c.id));
       wireEmojiPicker(replyForm.querySelector('.reply-body'));
       replyForm.querySelector('.reply-cancel-btn').addEventListener('click', () => {
         replyForm.reset();
