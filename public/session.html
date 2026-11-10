@@ -95,6 +95,10 @@
               </div>
               <div id="tiktok-embed" class="mix-embed hidden"></div>
               <div id="instagram-embed" class="mix-embed hidden"></div>
+              <!-- Nur im Vollbild bei YouTube aktiv: fängt Maus/Touch über dem
+                   iframe ab (sonst kämen keine Events für das Ein-/Ausblenden
+                   der schwebenden Leiste an), ein Klick toggelt Play/Pause. -->
+              <div class="fs-shield" id="fs-shield"></div>
               <div class="bubble-overlay" id="bubble-overlay"></div>
             </div>
 

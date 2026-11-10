@@ -2544,6 +2544,12 @@
     function updatePlayPauseIcon() {
       playPauseBtn.textContent = isPlaying ? '⏸' : '▶';
       playPauseBtn.setAttribute('aria-label', isPlaying ? 'Pausieren' : 'Abspielen');
+      // Schwebende Vollbild-Leiste: bei Pause einblenden, bei Wiedergabe den
+      // Ausblende-Timer starten (gilt für ARD/Video und YouTube gleichermaßen).
+      if (fsOverlayActive()) {
+        if (isPlaying) scheduleFsControlsHide();
+        else showFsControls();
+      }
     }
 
     function updateNowPlaying(item) {
@@ -3186,10 +3192,14 @@
       else requestPlayerFullscreen();
     });
 
-    // ---------- Vollbild ARD/Video: schwebende Glass-Leiste ----------
-    // Bei ARD/Video-Items im Vollbild schwebt die Steuerleiste über dem Bild
-    // (.fs-overlay, siehe style.css). Die nativen Video-Controls werden dann
-    // abgeschaltet, weil sie sonst mit der eigenen Leiste überlappen. Während
+    // ---------- Vollbild ARD/Video + YouTube: schwebende Glass-Leiste ----------
+    // Bei ARD/Video- und YouTube-Items im Vollbild schwebt die Steuerleiste
+    // über dem Bild (.fs-overlay, siehe style.css). Die nativen Video-Controls
+    // werden dann abgeschaltet, weil sie sonst mit der eigenen Leiste
+    // überlappen. Bei YouTube liegt stattdessen #fs-shield über dem iframe:
+    // Maus-Events im iframe kämen sonst nie bei uns an, und YouTubes eigene
+    // Bedienelemente (die mit der Leiste kollidieren würden) bleiben so
+    // während der Wiedergabe verborgen. Während
     // der Wiedergabe blendet sich die Leiste nach FS_CONTROLS_HIDE_MS ohne
     // Maus-/Touch-/Tastatur-Aktivität aus – nicht aber, solange das
     // Kommentarfeld fokussiert ist oder der Mauszeiger über der Leiste steht.
@@ -3197,6 +3207,8 @@
     const FS_CONTROLS_HIDE_MS = 3000;
     let fsHideTimer = null;
     let fsSuppressNextVideoClick = false;
+    const fsShield = document.getElementById('fs-shield');
+    const FS_OVERLAY_PROVIDERS = ['ard', 'youtube'];
 
     function fsOverlayActive() {
       return !!playerWrap && playerWrap.classList.contains('fs-overlay');
@@ -3216,10 +3228,10 @@
     function scheduleFsControlsHide() {
       clearTimeout(fsHideTimer);
       fsHideTimer = null;
-      if (!fsOverlayActive() || video.paused) return;
+      if (!fsOverlayActive() || !isPlaying) return;
       fsHideTimer = setTimeout(() => {
         fsHideTimer = null;
-        if (!fsOverlayActive() || video.paused) return;
+        if (!fsOverlayActive() || !isPlaying) return;
         const active = document.activeElement;
         const typing = active && playerWrap.contains(active) && (active.tagName === 'INPUT' || active.tagName === 'SELECT');
         const hovering = playerControlsEl?.matches(':hover') || speedSelect?.matches(':hover');
@@ -3233,7 +3245,8 @@
 
     function updateFsOverlay() {
       if (!playerWrap) return;
-      const on = getFullscreenElement() === playerWrap && ardIsActive();
+      const on =
+        getFullscreenElement() === playerWrap && FS_OVERLAY_PROVIDERS.includes(playlist[currentIndex]?.provider);
       const wasOn = fsOverlayActive();
       playerWrap.classList.toggle('fs-overlay', on);
       if (on) {
@@ -3264,7 +3277,7 @@
     // zurück, statt gleichzeitig Play/Pause umzuschalten (siehe video-click).
     playerWrap?.addEventListener('pointerdown', (e) => {
       if (!fsOverlayActive()) return;
-      if (e.pointerType !== 'mouse' && e.target === video && playerWrap.classList.contains('fs-controls-hidden')) {
+      if (e.pointerType !== 'mouse' && (e.target === video || e.target === fsShield) && playerWrap.classList.contains('fs-controls-hidden')) {
         fsSuppressNextVideoClick = true;
       }
       showFsControls();
@@ -3275,11 +3288,12 @@
     playerWrap?.addEventListener('focusout', () => {
       if (fsOverlayActive()) scheduleFsControlsHide();
     });
-    video.addEventListener('play', () => {
-      if (fsOverlayActive()) scheduleFsControlsHide();
-    });
-    video.addEventListener('pause', () => {
-      if (fsOverlayActive()) showFsControls();
+    fsShield?.addEventListener('click', () => {
+      if (fsSuppressNextVideoClick) {
+        fsSuppressNextVideoClick = false;
+        return;
+      }
+      togglePlayPause();
     });
 
     // ---------- Jump-to-Timecode + Nächster Kommentar ----------
