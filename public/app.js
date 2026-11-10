@@ -2573,6 +2573,9 @@
       // reagieren kann (siehe .player-wrap:fullscreen[data-provider="ard"] in
       // style.css – blendet dort .mix-now-playing aus).
       if (playerWrap) playerWrap.dataset.provider = provider || '';
+      // Wechsel ARD ↔ iframe-Provider mitten im Vollbild: schwebende Leiste
+      // passend an- bzw. abschalten.
+      if (getFullscreenElement()) updateFsOverlay();
     }
 
     function stopPlaybackForProvider(provider) {
@@ -2724,6 +2727,10 @@
     });
     video.addEventListener('click', () => {
       if (!ardIsActive()) return;
+      if (fsSuppressNextVideoClick) {
+        fsSuppressNextVideoClick = false;
+        return;
+      }
       if (video.paused) video.play();
       else video.pause();
     });
@@ -3177,6 +3184,102 @@
     fullscreenBtn?.addEventListener('click', () => {
       if (getFullscreenElement()) exitFullscreen();
       else requestPlayerFullscreen();
+    });
+
+    // ---------- Vollbild ARD/Video: schwebende Glass-Leiste ----------
+    // Bei ARD/Video-Items im Vollbild schwebt die Steuerleiste über dem Bild
+    // (.fs-overlay, siehe style.css). Die nativen Video-Controls werden dann
+    // abgeschaltet, weil sie sonst mit der eigenen Leiste überlappen. Während
+    // der Wiedergabe blendet sich die Leiste nach FS_CONTROLS_HIDE_MS ohne
+    // Maus-/Touch-/Tastatur-Aktivität aus – nicht aber, solange das
+    // Kommentarfeld fokussiert ist oder der Mauszeiger über der Leiste steht.
+    const playerControlsEl = document.getElementById('player-controls');
+    const FS_CONTROLS_HIDE_MS = 3000;
+    let fsHideTimer = null;
+    let fsSuppressNextVideoClick = false;
+
+    function fsOverlayActive() {
+      return !!playerWrap && playerWrap.classList.contains('fs-overlay');
+    }
+
+    function updateFsControlsHeight() {
+      if (!fsOverlayActive() || !playerControlsEl) return;
+      playerWrap.style.setProperty('--fs-controls-h', `${playerControlsEl.offsetHeight}px`);
+    }
+
+    function showFsControls() {
+      if (!playerWrap) return;
+      playerWrap.classList.remove('fs-controls-hidden');
+      scheduleFsControlsHide();
+    }
+
+    function scheduleFsControlsHide() {
+      clearTimeout(fsHideTimer);
+      fsHideTimer = null;
+      if (!fsOverlayActive() || video.paused) return;
+      fsHideTimer = setTimeout(() => {
+        fsHideTimer = null;
+        if (!fsOverlayActive() || video.paused) return;
+        const active = document.activeElement;
+        const typing = active && playerWrap.contains(active) && (active.tagName === 'INPUT' || active.tagName === 'SELECT');
+        const hovering = playerControlsEl?.matches(':hover') || speedSelect?.matches(':hover');
+        if (typing || hovering) {
+          scheduleFsControlsHide();
+          return;
+        }
+        playerWrap.classList.add('fs-controls-hidden');
+      }, FS_CONTROLS_HIDE_MS);
+    }
+
+    function updateFsOverlay() {
+      if (!playerWrap) return;
+      const on = getFullscreenElement() === playerWrap && ardIsActive();
+      const wasOn = fsOverlayActive();
+      playerWrap.classList.toggle('fs-overlay', on);
+      if (on) {
+        video.controls = false;
+        updateFsControlsHeight();
+        showFsControls();
+      } else {
+        clearTimeout(fsHideTimer);
+        fsHideTimer = null;
+        playerWrap.classList.remove('fs-controls-hidden');
+        if (wasOn) video.controls = true;
+      }
+    }
+
+    ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange'].forEach((evt) =>
+      document.addEventListener(evt, updateFsOverlay)
+    );
+
+    if (playerControlsEl && typeof ResizeObserver === 'function') {
+      new ResizeObserver(updateFsControlsHeight).observe(playerControlsEl);
+    }
+
+    playerWrap?.addEventListener('pointermove', (e) => {
+      if (!fsOverlayActive() || e.pointerType !== 'mouse') return;
+      showFsControls();
+    });
+    // Touch: Ist die Leiste ausgeblendet, holt ein Tippen aufs Bild sie nur
+    // zurück, statt gleichzeitig Play/Pause umzuschalten (siehe video-click).
+    playerWrap?.addEventListener('pointerdown', (e) => {
+      if (!fsOverlayActive()) return;
+      if (e.pointerType !== 'mouse' && e.target === video && playerWrap.classList.contains('fs-controls-hidden')) {
+        fsSuppressNextVideoClick = true;
+      }
+      showFsControls();
+    }, true);
+    playerWrap?.addEventListener('keydown', () => {
+      if (fsOverlayActive()) showFsControls();
+    });
+    playerWrap?.addEventListener('focusout', () => {
+      if (fsOverlayActive()) scheduleFsControlsHide();
+    });
+    video.addEventListener('play', () => {
+      if (fsOverlayActive()) scheduleFsControlsHide();
+    });
+    video.addEventListener('pause', () => {
+      if (fsOverlayActive()) showFsControls();
     });
 
     // ---------- Jump-to-Timecode + Nächster Kommentar ----------

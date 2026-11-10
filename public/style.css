@@ -9,6 +9,15 @@
   --accent-hover: #7aa4f2;
   --danger: #e0555f;
   --radius: 10px;
+
+  /* Glass-Optik der schwebenden Vollbild-Steuerleiste (ARD/Video). */
+  --glass-bg: rgba(255, 255, 255, 0.10);
+  --glass-bg-hover: rgba(255, 255, 255, 0.20);
+  --glass-bg-fallback: rgba(20, 22, 28, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-border-hover: rgba(255, 255, 255, 0.34);
+  --glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  --glass-blur: blur(12px) saturate(140%);
 }
 
 * { box-sizing: border-box; }
@@ -2484,5 +2493,197 @@ button[data-testid="play-pause-button"] {
     max-height: 65vh;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+  }
+}
+/* ========================================================= */
+/* Vollbild ARD/Video: schwebende Glass-Steuerleiste          */
+/* ========================================================= */
+/* .fs-overlay setzt app.js (updateFsOverlay) auf .player-wrap, solange der
+   Player im Vollbild ist UND ein ARD/Video-Item läuft. Eine Klasse statt
+   :fullscreen-Pseudoklassen erspart die dreifachen Vendor-Regeln und lässt
+   iframe-Provider (Spotify/YouTube/TikTok) bewusst außen vor – deren eigene
+   Bedienelemente würden sonst von der Leiste verdeckt.
+   .fs-controls-hidden kommt dazu, wenn die Leiste nach Inaktivität
+   ausgeblendet ist. --fs-controls-h (Höhe der Leiste) misst app.js, damit
+   die Sprechblasen oberhalb der Leiste bleiben. */
+
+.player-wrap.fs-overlay {
+  padding: 0;
+  overflow: hidden;
+}
+
+.player-wrap.fs-overlay > .mix-player-card {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+}
+
+.player-wrap.fs-overlay .embed-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.player-wrap.fs-overlay #ard-embed {
+  height: 100%;
+  margin: 0;
+}
+
+.player-wrap.fs-overlay video {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.player-wrap.fs-overlay.fs-controls-hidden {
+  cursor: none;
+}
+
+/* Kopfbereich: bei ARD bleibt nur die Geschwindigkeitsauswahl, die oben
+   rechts schwebt. */
+.player-wrap.fs-overlay .mix-now-playing {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  margin: 0;
+  transition: opacity 0.25s ease;
+}
+
+.player-wrap.fs-overlay .player-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 15;
+  padding: 56px 24px 20px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.28) 55%, transparent);
+  transition: opacity 0.25s ease;
+}
+
+.player-wrap.fs-overlay.fs-controls-hidden .player-controls,
+.player-wrap.fs-overlay.fs-controls-hidden .mix-now-playing {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.player-wrap.fs-overlay .seek-buttons {
+  margin-top: 0;
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.player-wrap.fs-overlay .bubble-overlay {
+  bottom: calc(var(--fs-controls-h, 120px) + 12px);
+  transition: bottom 0.25s ease;
+}
+
+.player-wrap.fs-overlay.fs-controls-hidden .bubble-overlay {
+  bottom: 24px;
+}
+
+.player-wrap.fs-overlay .mix-pos-display {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+/* Glass-Flächen: Buttons, Feinsteuerungs-Gruppen, Speed-Select, Eingabefeld */
+.player-wrap.fs-overlay .seek-btn,
+.player-wrap.fs-overlay .play-pause-btn,
+.player-wrap.fs-overlay .step-group,
+.player-wrap.fs-overlay .speed-select,
+.player-wrap.fs-overlay .fullscreen-comment-bar input {
+  background: var(--glass-bg);
+  color: #fff;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+.player-wrap.fs-overlay .seek-btn:hover,
+.player-wrap.fs-overlay .play-pause-btn:hover,
+.player-wrap.fs-overlay .speed-select:hover,
+.player-wrap.fs-overlay .step-btn:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+}
+
+.player-wrap.fs-overlay .step-btn {
+  color: #fff;
+  background: transparent;
+}
+
+.player-wrap.fs-overlay .step-btn:first-child {
+  border-right-color: var(--glass-border);
+}
+
+.player-wrap.fs-overlay .step-btn:hover {
+  border-color: var(--glass-border);
+}
+
+.player-wrap.fs-overlay .seek-btn:disabled,
+.player-wrap.fs-overlay .seek-btn:disabled:hover {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+
+.player-wrap.fs-overlay .fullscreen-comment-bar input::placeholder {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.player-wrap.fs-overlay .fullscreen-comment-bar input:focus {
+  border-color: var(--glass-border-hover);
+  outline: none;
+}
+
+.player-wrap.fs-overlay .speed-select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.player-wrap.fs-overlay .more-toggle {
+  color: #fff;
+}
+
+.player-wrap.fs-overlay .advanced-panel.open {
+  border-top-color: var(--glass-border);
+}
+
+.player-wrap.fs-overlay .transport-divider {
+  background: var(--glass-border);
+}
+
+.player-wrap.fs-overlay .mobile-scrubber {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Ohne backdrop-filter (ältere Browser): dunkler, halbtransparenter Ersatz,
+   damit die Buttons auf hellen Szenen lesbar bleiben. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .player-wrap.fs-overlay .seek-btn,
+  .player-wrap.fs-overlay .play-pause-btn,
+  .player-wrap.fs-overlay .step-group,
+  .player-wrap.fs-overlay .speed-select,
+  .player-wrap.fs-overlay .fullscreen-comment-bar input,
+  .player-wrap.fs-overlay .seek-btn:disabled,
+  .player-wrap.fs-overlay .seek-btn:disabled:hover {
+    background: var(--glass-bg-fallback);
+  }
+}
+
+@media (max-width: 600px) {
+  .player-wrap.fs-overlay .player-controls {
+    padding: 40px 12px 12px;
+  }
+
+  .player-wrap.fs-overlay .mix-now-playing {
+    top: 10px;
+    right: 10px;
   }
 }

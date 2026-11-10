@@ -100,6 +100,10 @@
 
             <div class="marker-bar" id="marker-bar"></div>
 
+            <!-- Gemeinsamer Container für Scrubber + Steuerleiste: im
+                 Vollbild bei ARD/Video schwebt er als Glass-Leiste über dem
+                 Bild (siehe .player-wrap.fs-overlay in style.css). -->
+            <div class="player-controls" id="player-controls">
             <div class="mobile-scrubber track" id="mobile-scrubber">
               <div class="mobile-scrubber-fill track-fill" id="mobile-scrubber-fill"></div>
               <div class="mobile-scrubber-thumb track-thumb" id="mobile-scrubber-thumb"></div>
@@ -151,6 +155,7 @@
                 <span id="mix-pos-display" class="mix-pos-display">0:00 / 0:00</span>
                 <button type="button" class="seek-btn icon-btn icobtn" id="fullscreen-btn" aria-label="Vollbild" title="Vollbild">⛶</button>
               </div>
+            </div>
             </div>
           </div>
         </div>
