@@ -2712,3 +2712,197 @@ button[data-testid="play-pause-button"] {
     right: 10px;
   }
 }
+
+/* ---------- Vollbild-Leiste: Reihenfolge + Pfeilbänder ---------- */
+/* Im Overlay-Modus lösen sich alle Gruppierungs-Wrapper (auch mobil) per
+   display:contents auf, damit die Buttons per `order` frei angeordnet werden
+   können: Voriges, −30s, −5s, −1s, Play/Pause, +1s, +5s, +30s, Nächstes,
+   Nächster Kommentar, Kommentarfeld + Senden, Position. Voriges/−30/−5/−1
+   und +1/+5/+30/Nächstes rücken als "Pfeilband" eng zusammen; Voriges und
+   Nächstes bilden die Pfeilspitze. Der Vollbild-Button sitzt fest unten
+   rechts. */
+
+.player-wrap.fs-overlay .transport-row,
+.player-wrap.fs-overlay .advanced-panel,
+.player-wrap.fs-overlay .advanced-row,
+.player-wrap.fs-overlay .step-group,
+.player-wrap.fs-overlay .pos-row {
+  display: contents;
+}
+
+.player-wrap.fs-overlay .seek-buttons {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 6px;
+}
+
+.player-wrap.fs-overlay .transport-divider,
+.player-wrap.fs-overlay .more-toggle,
+.player-wrap.fs-overlay .restart-btn,
+.player-wrap.fs-overlay .mobile-comment-btn {
+  display: none;
+}
+
+.player-wrap.fs-overlay #prev-item-btn { order: 1; }
+.player-wrap.fs-overlay [data-seek="-30"] { order: 2; }
+.player-wrap.fs-overlay [data-seek="-5"] { order: 3; }
+.player-wrap.fs-overlay [data-seek="-1"] { order: 4; }
+.player-wrap.fs-overlay #play-pause-btn { order: 5; }
+.player-wrap.fs-overlay [data-seek="1"] { order: 6; }
+.player-wrap.fs-overlay [data-seek="5"] { order: 7; }
+.player-wrap.fs-overlay [data-seek="30"] { order: 8; }
+.player-wrap.fs-overlay #next-item-btn { order: 9; }
+.player-wrap.fs-overlay #next-comment-btn { order: 10; margin-left: 10px; flex: 0 1 auto; }
+.player-wrap.fs-overlay .fullscreen-comment-bar { order: 11; }
+.player-wrap.fs-overlay .mix-pos-display { order: 12; }
+
+/* Pfeilband-Segmente: gleiche Glass-Fläche, aber ohne Rahmen/Schatten
+   (clip-path würde sie ohnehin abschneiden) und nur 2px Abstand. */
+.player-wrap.fs-overlay #prev-item-btn,
+.player-wrap.fs-overlay #next-item-btn,
+.player-wrap.fs-overlay .seek-buttons [data-seek] {
+  flex: 0 0 auto;
+  width: 46px;
+  min-width: 0;
+  height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+.player-wrap.fs-overlay #prev-item-btn:hover:not(:disabled),
+.player-wrap.fs-overlay #next-item-btn:hover:not(:disabled),
+.player-wrap.fs-overlay .seek-buttons [data-seek]:hover {
+  background: var(--glass-bg-hover);
+}
+
+.player-wrap.fs-overlay #prev-item-btn:disabled,
+.player-wrap.fs-overlay #next-item-btn:disabled {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Segmente innerhalb eines Bands rücken auf 2px zusammen (gap ist 6px). */
+.player-wrap.fs-overlay [data-seek="-30"],
+.player-wrap.fs-overlay [data-seek="-5"],
+.player-wrap.fs-overlay [data-seek="-1"],
+.player-wrap.fs-overlay [data-seek="5"],
+.player-wrap.fs-overlay [data-seek="30"],
+.player-wrap.fs-overlay #next-item-btn {
+  margin-left: -4px;
+}
+
+/* Pfeilspitzen */
+.player-wrap.fs-overlay #prev-item-btn {
+  width: 60px;
+  padding-left: 12px;
+  clip-path: polygon(22px 0, 100% 0, 100% 100%, 22px 100%, 0 50%);
+}
+
+.player-wrap.fs-overlay #next-item-btn {
+  width: 60px;
+  padding-right: 12px;
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 50%, calc(100% - 22px) 100%, 0 100%);
+}
+
+/* Abgerundete Enden am Play-Button */
+.player-wrap.fs-overlay [data-seek="-1"] { border-radius: 0 6px 6px 0; }
+.player-wrap.fs-overlay [data-seek="1"] { border-radius: 6px 0 0 6px; }
+
+/* Play/Pause rund zwischen den beiden Bändern */
+.player-wrap.fs-overlay #play-pause-btn {
+  width: 46px;
+  height: 46px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  margin: 0 4px;
+}
+
+/* Vollbild-Button fest unten rechts; die Leiste hält rechts Platz frei. */
+.player-wrap.fs-overlay .player-controls {
+  padding-right: 84px;
+  padding-left: 84px;
+}
+
+.player-wrap.fs-overlay #fullscreen-btn {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  width: 42px;
+  height: 42px;
+  min-width: 0;
+  padding: 0;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .player-wrap.fs-overlay #prev-item-btn,
+  .player-wrap.fs-overlay #next-item-btn,
+  .player-wrap.fs-overlay .seek-buttons [data-seek] {
+    background: var(--glass-bg-fallback);
+  }
+}
+
+@media (max-width: 600px) {
+  .player-wrap.fs-overlay .player-controls {
+    padding: 40px 12px 12px;
+  }
+
+  .player-wrap.fs-overlay #prev-item-btn,
+  .player-wrap.fs-overlay #next-item-btn,
+  .player-wrap.fs-overlay .seek-buttons [data-seek] {
+    width: 34px;
+    height: 38px;
+    font-size: 12px;
+  }
+
+  .player-wrap.fs-overlay #prev-item-btn,
+  .player-wrap.fs-overlay #next-item-btn {
+    width: 42px;
+  }
+
+  .player-wrap.fs-overlay #prev-item-btn {
+    padding-left: 10px;
+    clip-path: polygon(16px 0, 100% 0, 100% 100%, 16px 100%, 0 50%);
+  }
+
+  .player-wrap.fs-overlay #next-item-btn {
+    padding-right: 10px;
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%);
+  }
+
+  .player-wrap.fs-overlay #play-pause-btn {
+    width: 42px;
+    height: 42px;
+    margin: 0 2px;
+  }
+
+  .player-wrap.fs-overlay #next-comment-btn {
+    margin-left: 0;
+  }
+
+  /* Positionszeile so hoch wie der Eck-Button, damit dieser neben der
+     Positionsanzeige sitzt statt in die Kommentarzeile zu ragen. */
+  .player-wrap.fs-overlay .mix-pos-display {
+    line-height: 38px;
+  }
+
+  .player-wrap.fs-overlay #fullscreen-btn {
+    right: 12px;
+    bottom: 12px;
+    width: 38px;
+    height: 38px;
+  }
+}
