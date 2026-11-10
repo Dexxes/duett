@@ -1817,6 +1817,11 @@
 
     let playlist = [];
     let comments = [];
+    // Siehe markCommentsMutated/loadComments/renderComments (Schutz gegen
+    // verschluckte, frisch abgesendete Kommentare/Antworten).
+    let commentsMutationSeq = 0;
+    let commentsLoadSeq = 0;
+    let commentsRenderDeferred = false;
     let currentIndex = -1;
     let spotifyController = null;
     let spotifyHasLoadedTrack = false;
@@ -3518,7 +3523,19 @@
     // bereits vorhandenen Fehler-UI, z. B. commentErrorEl).
     let nextTempCommentId = -1;
 
+    // Zählt lokale Änderungen am comments-Array (Anlegen, Bestätigen,
+    // Verwerfen, Bearbeiten, Löschen). loadComments() merkt sich den Stand
+    // VOR dem GET und verwirft die Antwort, wenn sich lokal inzwischen etwas
+    // geändert hat – sonst überschreibt ein Polling-Request, der vor dem
+    // POST gestartet wurde, aber danach zurückkommt, die gerade abgesendete
+    // Antwort mit einem veralteten Stand (sie "verschwindet" dann bis zum
+    // nächsten Poll, siehe POLL_MS).
+    function markCommentsMutated() {
+      commentsMutationSeq++;
+    }
+
     function createOptimisticComment(payload) {
+      markCommentsMutated();
       const tempId = nextTempCommentId--;
       comments.push({
         id: tempId,
@@ -3541,6 +3558,9 @@
     }
 
     function reconcileOptimisticComment(tempId, serverComment) {
+      markCommentsMutated();
+      // Falls ein Poll die echte Zeile schon geliefert hat, nicht doppelt führen.
+      comments = comments.filter((c) => c.id !== serverComment.id);
       const idx = comments.findIndex((c) => c.id === tempId);
       const merged = { ...serverComment, reactions: serverComment.reactions || [] };
       if (idx !== -1) comments.splice(idx, 1, merged);
@@ -3550,6 +3570,7 @@
     }
 
     function discardOptimisticComment(tempId) {
+      markCommentsMutated();
       const idx = comments.findIndex((c) => c.id === tempId);
       if (idx !== -1) comments.splice(idx, 1);
       renderComments();
@@ -3559,7 +3580,6 @@
     async function createTopLevelComment(timecodeSec, body, image) {
       const item = playlist[currentIndex];
       if (!item) throw new Error('Bitte zuerst eine Quelle zur Playlist hinzufügen');
-      await ensureLinkAddedToPlaylist(body);
       const timecode = item.provider === 'instagram' ? null : timecodeSec;
       const payload = {
         author_name: authorName,
@@ -3569,8 +3589,12 @@
         timecode_sec: timecode,
         item_id: item.id,
       };
+      // Erst optimistisch anzeigen, dann ggf. Links in die Playlist übernehmen
+      // (kann bei YouTube-/Spotify-Auflösung einige Sekunden dauern) – sonst
+      // erscheint der Kommentar erst danach.
       const tempId = createOptimisticComment(payload);
       try {
+        await ensureLinkAddedToPlaylist(body);
         const created = await postComment(payload);
         reconcileOptimisticComment(tempId, created);
         if (timecode != null) {
@@ -3715,11 +3739,11 @@
       if (!body) return;
       try {
         if (fsReplyTarget) {
-          await ensureLinkAddedToPlaylist(body);
           const payload = { parent_id: fsReplyTarget.id, author_name: authorName, author_color: authorColorChoice || null, body };
           cancelFsReply();
           const tempId = createOptimisticComment(payload);
           try {
+            await ensureLinkAddedToPlaylist(body);
             const created = await postComment(payload);
             reconcileOptimisticComment(tempId, created);
           } catch (err) {
@@ -3746,13 +3770,26 @@
 
     // ---------- Kommentare laden/rendern ----------
 
+    // Nur die Antwort des jeweils zuletzt gestarteten GETs übernehmen, damit
+    // sich überholende Requests (langsames Netz) keinen älteren Stand setzen.
     async function loadComments() {
+      const loadSeq = ++commentsLoadSeq;
+      const mutationSeqAtStart = commentsMutationSeq;
       try {
         const data = await apiFetch(
           `api/streams/${streamId}/comments${authorName ? `?author_name=${encodeURIComponent(authorName)}` : ''}`,
           { headers: accessHeaders() }
         );
-        comments = data;
+        if (loadSeq !== commentsLoadSeq) return;
+        if (mutationSeqAtStart !== commentsMutationSeq) {
+          // Lokal wurde währenddessen etwas abgesendet/geändert – der Stand
+          // ist veraltet. Direkt neu laden statt bis zum nächsten Poll warten.
+          loadComments();
+          return;
+        }
+        // Noch nicht bestätigte (optimistische) Einträge behalten.
+        const pending = comments.filter((c) => c.pending);
+        comments = pending.length ? data.concat(pending) : data;
         renderComments();
         renderMarkers();
       } catch (err) {
@@ -3805,7 +3842,6 @@
     }
 
     async function submitMixReply(parentId, body, formEl, image) {
-      await ensureLinkAddedToPlaylist(body);
       const payload = {
         parent_id: parentId,
         author_name: authorName,
@@ -3821,6 +3857,7 @@
       formEl.classList.add('hidden');
       const tempId = createOptimisticComment(payload);
       try {
+        await ensureLinkAddedToPlaylist(body);
         const created = await postComment(payload);
         reconcileOptimisticComment(tempId, created);
       } catch (err) {
@@ -3830,28 +3867,31 @@
     }
 
     async function submitMixEdit(commentId, body, image, onSaved) {
-      await ensureLinkAddedToPlaylist(body);
       const comment = comments.find((c) => c.id === commentId);
       const previous = comment ? { body: comment.body, image: comment.image, updated_at: comment.updated_at } : null;
       // Formular VOR dem optimistischen Rendern schließen (siehe submitMixReply).
       onSaved?.();
       if (comment) {
+        markCommentsMutated();
         comment.body = body;
         comment.image = image || null;
         comment.updated_at = Date.now();
         renderComments();
       }
       try {
+        await ensureLinkAddedToPlaylist(body);
         const updated = await apiFetch(`api/comments/${commentId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', ...accessHeaders() },
           body: JSON.stringify({ body, image: image || null, author_name: authorName }),
         });
+        markCommentsMutated();
         if (comment) {
           Object.assign(comment, updated);
           renderComments();
         }
       } catch (err) {
+        markCommentsMutated();
         if (comment && previous) {
           comment.body = previous.body;
           comment.image = previous.image;
@@ -3999,6 +4039,7 @@
       // mitnehmen, damit der Client-Stand konsistent bleibt.
       const removed = comments.filter((c) => c.id === id || c.parent_id === id);
       if (removed.length > 0) {
+        markCommentsMutated();
         comments = comments.filter((c) => c.id !== id && c.parent_id !== id);
         renderComments();
         renderMarkers();
@@ -4010,6 +4051,7 @@
           body: JSON.stringify({ author_name: authorName }),
         });
       } catch (err) {
+        markCommentsMutated();
         comments.push(...removed);
         renderComments();
         renderMarkers();
@@ -4236,10 +4278,29 @@
     // Position), damit die Zugehörigkeit mehrerer Kommentare zum selben Item
     // visuell erkennbar ist (siehe ToDo.md/Merge-Entscheidung) – innerhalb
     // jeder Gruppe gilt der Früh/Spät-Umschalter (sortOrder).
+    const commentFormObserver = new MutationObserver(() => {
+      if (!commentsRenderDeferred) return;
+      const stillOpen =
+        commentList.querySelector('.reply-form:not(.hidden)') || commentList.querySelector('.edit-form:not(.hidden)');
+      if (!stillOpen) {
+        renderComments();
+        renderMarkers();
+      }
+    });
+    commentFormObserver.observe(commentList, { subtree: true, attributes: true, attributeFilter: ['class'] });
+
     function renderComments() {
       const anyFormOpen =
         commentList.querySelector('.reply-form:not(.hidden)') || commentList.querySelector('.edit-form:not(.hidden)');
-      if (anyFormOpen) return;
+      if (anyFormOpen) {
+        // Nicht verwerfen, sondern nachholen, sobald das Formular zu ist
+        // (siehe commentFormObserver) – sonst bliebe z. B. eine gerade
+        // abgesendete Antwort unsichtbar, solange irgendwo anders noch ein
+        // Antwort-/Bearbeiten-Formular offen ist.
+        commentsRenderDeferred = true;
+        return;
+      }
+      commentsRenderDeferred = false;
 
       const allTopLevel = comments.filter((c) => c.parent_id === null);
       const byParent = {};
