@@ -14,30 +14,12 @@
 
   // ---------- Helpers ----------
 
+  // Maskiert auch Anführungszeichen: das Ergebnis landet u. a. in
+  // Attributwerten (z. B. href in linkifyWithPlaylistRefs) – ein bloßes
+  // textContent->innerHTML würde " und ' durchlassen (XSS).
+  const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
-  // Wandelt URLs in bereits escapetem HTML-Text in klickbare Links um.
-  // Läuft NACH escapeHtml, sodass kein rohes HTML aus Nutzereingaben
-  // eingeschleust werden kann – es werden nur <a>-Tags um URL-Treffer gelegt.
-  function linkify(safeHtml) {
-    const urlRegex = /((https?:\/\/|www\.)[^\s<]+)/gi;
-    return safeHtml.replace(urlRegex, (match) => {
-      let core = match;
-      let trailing = '';
-      const trailingChars = new Set(['.', ',', ';', ':', '!', '?', ')', ']', '"', "'"]);
-      while (core.length > 0 && trailingChars.has(core[core.length - 1])) {
-        trailing = core[core.length - 1] + trailing;
-        core = core.slice(0, -1);
-      }
-      if (!core) return match;
-      let href = core;
-      if (!/^https?:\/\//i.test(href)) href = 'https://' + href;
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer nofollow ugc">${core}</a>${trailing}`;
-    });
+    return String(str ?? '').replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
   }
 
   // Zeichenlimit für Sprechblasen im Vollbild: alles darüber hinaus wird
@@ -78,16 +60,27 @@
     return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
   }
 
-  // Erlaubt Eingaben wie "90", "1:30" oder "1:02:05" als Sekunden.
+  // Wie formatTime, aber mit Zehntelsekunde (falls vorhanden) – für das
+  // Zeitpunkt-Feld im Kommentarformular, das dasselbe Format wie das
+  // Sprung-Feld annimmt (siehe parseTimecode).
+  function formatTimecodeInput(sec) {
+    sec = Math.max(0, sec || 0);
+    const tenths = Math.floor((sec - Math.floor(sec)) * 10);
+    return formatTime(sec) + (tenths ? `.${tenths}` : '');
+  }
+
+  // Erlaubt Eingaben wie "90", "1:30", "1:30.5" oder "1:02:05" als Sekunden.
   function parseTimecode(str) {
     str = (str || '').trim();
     if (!str) return null;
     if (/^\d+(\.\d+)?$/.test(str)) return parseFloat(str);
     const parts = str.split(':');
-    if (parts.length < 2 || parts.some((p) => !/^\d+$/.test(p))) return null;
+    if (parts.length < 2 || parts.length > 3) return null;
+    const last = parts.pop();
+    if (parts.some((p) => !/^\d+$/.test(p)) || !/^\d+(\.\d+)?$/.test(last)) return null;
     let seconds = 0;
     for (const p of parts) seconds = seconds * 60 + parseInt(p, 10);
-    return seconds;
+    return seconds * 60 + parseFloat(last);
   }
 
   // Strg+Enter (bzw. Cmd+Enter auf dem Mac) sendet ein Formular ab, ohne
@@ -327,7 +320,10 @@
     for (let i = 0; i < name.length; i++) {
       hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
     }
-    const hue = hash % 360;
+    // Blautöne (ca. 190°–260°) aussparen – wie bei AUTHOR_COLOR_PALETTE,
+    // da --accent bereits blau ist.
+    let hue = hash % 290;
+    if (hue >= 190) hue += 70;
     return `hsl(${hue}, 62%, 58%)`;
   }
 
@@ -420,7 +416,7 @@
     try {
       await apiFetch(`api/comments/${comment.id}/read`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...streamAccessHeaders(comment.stream_id) },
         body: JSON.stringify({ author_name: authorName, read }),
       });
     } catch (err) {
@@ -452,6 +448,7 @@
           await setCommentRead(comment, !isCommentRead(comment, authorName), authorName);
         } catch (err) {
           console.error('Gelesen-Status konnte nicht gespeichert werden:', err);
+          alert('Gelesen-Status konnte nicht gespeichert werden: ' + err.message);
         }
         btn.disabled = false;
         refresh();
@@ -504,6 +501,11 @@
     let saveTimer = null;
     let lines = []; // [{ text, author_name, author_color }]
     let lastKnownText = '';
+    // true, sobald seit dem letzten Speichern tatsächlich getippt wurde. Ohne
+    // dieses Flag hätte ein bloßes Hinein- und Herausklicken den (beim
+    // Fokussieren eingefrorenen) alten Textarea-Inhalt gespeichert und damit
+    // zwischenzeitliche Änderungen anderer überschrieben.
+    let dirty = false;
 
     function linesToText(ls) {
       return ls.map((l) => l.text).join('\n');
@@ -547,6 +549,16 @@
       if (document.activeElement !== textarea) {
         textarea.value = lastKnownText;
         showView();
+      } else if (!dirty && textarea.value !== lastKnownText) {
+        // Fokussiert, aber noch nichts getippt: Stand anderer übernehmen,
+        // Cursor möglichst erhalten.
+        const { selectionStart, selectionEnd } = textarea;
+        textarea.value = lastKnownText;
+        try {
+          textarea.setSelectionRange(selectionStart, selectionEnd);
+        } catch {
+          // ignore
+        }
       }
     }
 
@@ -569,8 +581,13 @@
     }
 
     async function save() {
+      if (!dirty) return;
       const value = textarea.value;
-      if (value === lastKnownText) return;
+      if (value === lastKnownText) {
+        dirty = false;
+        return;
+      }
+      dirty = false;
       const newLines = computeNewLines(value.split('\n'));
       try {
         const data = await apiFetch(`api/streams/${streamId}/notes`, {
@@ -581,12 +598,15 @@
         lines = data.lines || newLines;
         lastKnownText = linesToText(lines);
       } catch (err) {
+        dirty = true; // beim nächsten Anlass erneut versuchen
         console.error('Notizen konnten nicht gespeichert werden:', err);
+        alert('Notizen konnten nicht gespeichert werden: ' + err.message);
       }
     }
 
     textarea.addEventListener('focus', showEditor);
     textarea.addEventListener('input', () => {
+      dirty = true;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(save, 800);
     });
@@ -616,6 +636,19 @@
 
   function getStreamAccessToken(streamId) {
     return getStreamAccessTokens()[streamId] || null;
+  }
+
+  // Header für den Zugriff auf eine (ggf. passwortgeschützte) Session: Access-
+  // Token aus dem Passwort-Login und – falls die Seite über den Admin-Link
+  // geöffnet wurde – der Admin-Token, den der Server ebenfalls als Zugang
+  // akzeptiert (siehe checkStreamAccess in server.js).
+  function streamAccessHeaders(streamId) {
+    const headers = {};
+    const token = getStreamAccessToken(streamId);
+    if (token) headers['X-Stream-Access'] = token;
+    const adminToken = new URLSearchParams(location.search).get('admin');
+    if (adminToken) headers['X-Admin-Token'] = adminToken;
+    return headers;
   }
 
   function setStreamAccessToken(streamId, token) {
@@ -674,6 +707,25 @@
   function spotifyOpenUrl(item) {
     const m = /^spotify:track:([a-zA-Z0-9]+)$/.exec(item?.provider_uri || '');
     return m ? `https://open.spotify.com/track/${m[1]}` : 'https://open.spotify.com/';
+  }
+
+  // Link zum Original eines Playlist-Eintrags (für das Anbieter-Icon in der
+  // Playlist), oder null, wenn keiner bekannt ist (z. B. TikTok, roher
+  // m3u8-Link ohne Mediathek-Seite).
+  function itemOpenLink(item) {
+    if (!item) return null;
+    if (item.provider === 'spotify') return { url: spotifyOpenUrl(item), label: 'In Spotify öffnen' };
+    if (item.provider === 'youtube' && /^[a-zA-Z0-9_-]{11}$/.test(item.provider_uri || '')) {
+      return { url: `https://www.youtube.com/watch?v=${item.provider_uri}`, label: 'Auf YouTube öffnen' };
+    }
+    if (item.provider === 'instagram') {
+      const m = /^(reel|p):([A-Za-z0-9_-]+)$/.exec(item.provider_uri || '');
+      if (m) return { url: `https://www.instagram.com/${m[1]}/${m[2]}/`, label: 'Auf Instagram öffnen' };
+    }
+    if (item.provider === 'ard' && /^https?:\/\//i.test(item.source_url || '')) {
+      return { url: item.source_url, label: 'In der Mediathek öffnen' };
+    }
+    return null;
   }
 
   function isYouTubeInput(input) {
@@ -896,7 +948,7 @@
         'Dieser Link ist eine YouTube-Playlist. Alle Videos der Playlist zur Session hinzufügen?'
       );
       if (!wantsPlaylist) {
-        throw new Error('Playlist-Import abgebrochen.');
+        throw new Error('Playlist-Import abgebrochen');
       }
       videoIds = await resolvePlaylistVideoIds(parsed.id);
     } else if (parsed.playlistId) {
@@ -1110,11 +1162,11 @@
     });
   }
 
-  // Wie linkify(), aber Spotify-/YouTube-/TikTok-/Instagram- und Mediathek-
+  // Wandelt URLs in bereits escapetem HTML-Text in klickbare Links um.
+  // Spotify-/YouTube-/TikTok-/Instagram- und Mediathek-
   // Links (ARD/ZDF/Arte/3sat), die sich einem bereits bekannten Playlist-Item
   // zuordnen lassen, werden statt als externer Link als In-App-Sprung zum
-  // Playlist-Item gerendert. Andere URLs verhalten sich wie bei linkify()
-  // gewohnt. @-Mentions (siehe linkifyMentions) werden
+  // Playlist-Item gerendert. Andere URLs werden zu normalen externen Links. @-Mentions (siehe linkifyMentions) werden
   // zuerst aufgelöst.
   function linkifyWithPlaylistRefs(safeHtml, playlistArr) {
     const withMentions = linkifyMentions(safeHtml, playlistArr);
@@ -1142,12 +1194,133 @@
     });
   }
 
+  // ---------- Emoji-Button + Flyout für Kommentar-/Antwort-/Edit-Felder ----------
+  //
+  // Jede Textarea bekommt ihren eigenen Button samt Flyout (in einem
+  // .comment-body-wrap, an dem beide absolut positioniert sind), damit
+  // Kommentar-, Antwort- und Bearbeiten-Formular gleich bedienbar sind.
+
+  const EMOJI_LIST = [
+    '😀', '😂', '🥲', '😅', '😊', '😍', '🤔', '😮',
+    '😢', '😭', '😡', '🥳', '😴', '🙄', '😱', '🤯',
+    '👍', '👎', '👏', '🙌', '🙏', '💪', '👀', '✌️',
+    '❤️', '🔥', '✨', '🎉', '💯', '⭐', '✅', '❌',
+  ];
+
+  function insertAtCursor(textarea, text) {
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? textarea.value.length;
+    textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
+    const newPos = start + text.length;
+    textarea.setSelectionRange(newPos, newPos);
+  }
+
+  // Browser können das native Emoji-Panel des Betriebssystems (Windows:
+  // Win + . / macOS: Ctrl + Cmd + Leertaste) nicht per Script öffnen. Der
+  // Button behält deshalb den Fokus in der Textarea – so landet ein per
+  // Tastenkürzel geöffnetes System-Panel direkt dort – und das Flyout zeigt
+  // neben der Schnellauswahl einen Hinweis auf das passende Kürzel.
+  const NATIVE_EMOJI_SHORTCUT = (() => {
+    const platform = navigator.userAgentData?.platform || navigator.platform || '';
+    if (/win/i.test(platform)) return 'Win + .';
+    if (/mac/i.test(platform) && navigator.maxTouchPoints <= 1) return 'Ctrl + Cmd + Leertaste';
+    return null;
+  })();
+
+  function closeAllEmojiFlyouts() {
+    document.querySelectorAll('.emoji-flyout:not(.hidden)').forEach((flyout) => {
+      flyout.classList.add('hidden');
+      flyout.parentElement?.querySelector('.emoji-btn')?.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  let emojiGlobalListenersAdded = false;
+  function ensureEmojiGlobalListeners() {
+    if (emojiGlobalListenersAdded) return;
+    emojiGlobalListenersAdded = true;
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('.emoji-flyout:not(.hidden)').forEach((flyout) => {
+        const wrap = flyout.parentElement;
+        if (wrap && wrap.contains(e.target) && (e.target.closest('.emoji-btn') || flyout.contains(e.target))) return;
+        flyout.classList.add('hidden');
+        wrap?.querySelector('.emoji-btn')?.setAttribute('aria-expanded', 'false');
+      });
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeAllEmojiFlyouts();
+    });
+  }
+
+  // Legt die Textarea (falls nötig) in einen .comment-body-wrap und hängt
+  // Emoji-Button + Flyout daneben.
+  function wireEmojiPicker(textarea) {
+    if (!textarea) return;
+    ensureEmojiGlobalListeners();
+    let wrap = textarea.parentElement;
+    if (!wrap || !wrap.classList.contains('comment-body-wrap')) {
+      wrap = document.createElement('div');
+      wrap.className = 'comment-body-wrap';
+      textarea.replaceWith(wrap);
+      wrap.appendChild(textarea);
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emoji-btn';
+    btn.setAttribute('aria-label', 'Emoji einfügen');
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.textContent = '😀';
+    if (NATIVE_EMOJI_SHORTCUT) btn.title = `Emoji einfügen (alle Emojis: ${NATIVE_EMOJI_SHORTCUT})`;
+    // Mousedown soll den Fokus nicht aus der Textarea ziehen, damit
+    // Cursorposition und ein offenes System-Panel erhalten bleiben.
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
+    const flyout = document.createElement('div');
+    flyout.className = 'emoji-flyout hidden';
+    flyout.setAttribute('role', 'menu');
+    flyout.setAttribute('aria-label', 'Emoji-Auswahl');
+    EMOJI_LIST.forEach((emoji) => {
+      const opt = document.createElement('button');
+      opt.type = 'button';
+      opt.className = 'emoji-flyout-option';
+      opt.textContent = emoji;
+      opt.setAttribute('role', 'menuitem');
+      opt.addEventListener('mousedown', (e) => e.preventDefault());
+      opt.addEventListener('click', () => {
+        insertAtCursor(textarea, emoji);
+        closeAllEmojiFlyouts();
+        textarea.focus();
+      });
+      flyout.appendChild(opt);
+    });
+    if (NATIVE_EMOJI_SHORTCUT) {
+      const hint = document.createElement('p');
+      hint.className = 'emoji-flyout-hint';
+      hint.append('Alle Emojis: ');
+      const kbd = document.createElement('kbd');
+      kbd.textContent = NATIVE_EMOJI_SHORTCUT;
+      hint.appendChild(kbd);
+      flyout.appendChild(hint);
+    }
+    btn.addEventListener('click', () => {
+      const willOpen = flyout.classList.contains('hidden');
+      closeAllEmojiFlyouts();
+      if (willOpen) {
+        flyout.classList.remove('hidden');
+        btn.setAttribute('aria-expanded', 'true');
+        textarea.focus();
+      }
+    });
+    wrap.appendChild(btn);
+    wrap.appendChild(flyout);
+  }
+
   // ---------- @-Mentions: Autocomplete-Dropdown beim Tippen ----------
   //
   // Ein einziges, wiederverwendetes Dropdown-Element reicht aus, da immer
   // höchstens eine Kommentar-Textarea gleichzeitig fokussiert sein kann
   // (Haupt-, Vollbild-, Antwort- und Bearbeiten-Formular teilen sich dieses
   // eine Element, siehe wireMentionAutocomplete-Aufrufe weiter unten).
+
   let mentionDropdownEl = null;
   let mentionDropdownState = null; // { textarea, atIndex, items, activeIndex }
   let mentionScrollListenerAdded = false;
@@ -1333,6 +1506,8 @@
     const createAnotherBtn = document.getElementById('create-another-btn');
     const resultItemNote = document.getElementById('result-item-note');
     const submitBtn = document.getElementById('create-submit-btn');
+    const titleError = document.getElementById('title-error');
+    titleInput.addEventListener('input', () => titleError?.classList.add('hidden'));
 
     let currentStep = 1;
 
@@ -1351,9 +1526,11 @@
     document.querySelectorAll('.wizard-next').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (currentStep === 1 && !titleInput.value.trim()) {
+          titleError?.classList.remove('hidden');
           titleInput.focus();
           return;
         }
+        titleError?.classList.add('hidden');
         showStep(Number(btn.dataset.goto));
       });
     });
@@ -1437,7 +1614,12 @@
         errorEl.textContent = err.message;
         errorEl.classList.remove('hidden');
         hideMixStatus();
-        if (sourceInput) showStep(2);
+        // Zum Schritt springen, zu dem der Fehler gehört – nicht pauschal zur
+        // Quelle, wenn z. B. nur der Kurzlink vergeben ist.
+        const msg = err.message || '';
+        if (/^Titel/.test(msg)) showStep(1);
+        else if (err.status === 409 || /^(Kurzlink|Passwort)/.test(msg)) showStep(3);
+        else if (sourceInput) showStep(2);
       } finally {
         submitBtn.disabled = false;
       }
@@ -1458,7 +1640,7 @@
         navigator.clipboard?.writeText(target.value).catch(() => {});
         document.execCommand?.('copy');
         const original = btn.textContent;
-        btn.textContent = 'Kopiert!';
+        btn.textContent = 'Kopiert ✓';
         setTimeout(() => (btn.textContent = original), 1500);
       });
     });
@@ -1568,6 +1750,7 @@
     const nameModalForm = document.getElementById('name-modal-form');
     const nameModalInput = document.getElementById('name-modal-input');
     const nameModalSkip = document.getElementById('name-modal-skip');
+    const nameModalError = document.getElementById('name-modal-error');
     const colorSwatchesEl = document.getElementById('color-swatches');
     const adminPasswordCard = document.getElementById('admin-password-card');
     const adminPasswordStatus = document.getElementById('admin-password-status');
@@ -1639,9 +1822,10 @@
 
     // ---------- Playlist-Sortierung nach Hinzufüge-Datum ----------
     //
-    // Regelt nur die Anzeige-Reihenfolge der Playlist-Leiste ("neueste" bzw.
-    // "älteste zuerst", Standard: neueste). Wiedergabereihenfolge und
-    // currentIndex (Vor/Zurück) bleiben an der Playlist-Position.
+    // Regelt die Reihenfolge der Playlist-Leiste ("neueste" bzw. "älteste
+    // zuerst", Standard: neueste) – und damit auch die Wiedergabe-
+    // reihenfolge: Start, Vor/Zurück und automatisches Weiterspielen folgen
+    // immer der angezeigten Sortierung (siehe playlistDisplayOrder).
 
     let playlistSortOrder = localStorage.getItem(PLAYLIST_SORT_KEY) === 'asc' ? 'asc' : 'desc';
 
@@ -1658,6 +1842,7 @@
       localStorage.setItem(PLAYLIST_SORT_KEY, playlistSortOrder);
       updatePlaylistSortUI();
       renderPlaylist();
+      renderComments();
     }
 
     if (playlistSortToggle) {
@@ -1710,6 +1895,7 @@
 
     function openNameModal() {
       nameModalInput.value = authorName;
+      nameModalError?.classList.add('hidden');
       modalColorChoice = authorColorChoice;
       colorTouched = false;
       renderColorSwatches(colorSwatchesEl, modalColorChoice, onColorSwatchSelect);
@@ -1753,9 +1939,11 @@
     async function submitNameModal() {
       const value = nameModalInput.value.trim();
       if (!value) {
+        nameModalError?.classList.remove('hidden');
         nameModalInput.focus();
         return;
       }
+      nameModalError?.classList.add('hidden');
       const submitBtn = nameModalForm.querySelector('button[type="submit"]');
       if (submitBtn) submitBtn.disabled = true;
       try {
@@ -1795,8 +1983,14 @@
     function adminHeaders() {
       return adminToken ? { 'X-Admin-Token': adminToken } : {};
     }
+    // Schickt neben dem Access-Token auch den Admin-Token mit: der Server
+    // akzeptiert ihn als Zugang zu passwortgeschützten Sessions, sodass der
+    // Admin-Link nicht zusätzlich nach dem Passwort fragt.
     function accessHeaders() {
-      return accessToken ? { 'X-Stream-Access': accessToken } : {};
+      return {
+        ...(accessToken ? { 'X-Stream-Access': accessToken } : {}),
+        ...adminHeaders(),
+      };
     }
 
     const notesController = createNotesController(streamId, accessHeaders, () => ({
@@ -1959,13 +2153,39 @@
     async function loadItems() {
       try {
         const data = await apiFetch(`api/streams/${streamId}/items`, { headers: accessHeaders() });
-        const hadNoItemsYet = playlist.length === 0;
+        // currentIndex hängt am Array-Index – wird (auch von anderen
+        // Betrachtenden) ein Item VOR dem aktuellen entfernt, würde der Index
+        // sonst auf das falsche Item zeigen (Kommentare/Marker landen beim
+        // falschen Item). Deshalb über die Item-ID neu zuordnen.
+        const previousItem = playlist[currentIndex] || null;
+        const previousIndex = currentIndex;
         playlist = data;
+        let currentItemRemoved = false;
+        if (previousItem) {
+          const newIndex = playlist.findIndex((it) => it.id === previousItem.id);
+          if (newIndex !== -1) {
+            currentIndex = newIndex;
+          } else {
+            currentItemRemoved = true;
+            stopPlaybackForProvider(previousItem.provider);
+            isPlaying = false;
+            updatePlayPauseIcon();
+            currentIndex = -1;
+          }
+        } else {
+          currentIndex = -1;
+        }
         renderPlaylist();
         updatePremiumBannerVisibility();
         commentHereBtn.disabled = playlist.length === 0;
-        if (hadNoItemsYet && playlist.length > 0) {
-          loadItemIntoPlayer(0, false);
+        if (currentIndex === -1 && playlist.length > 0) {
+          // Erstes Laden: oberstes Item der angezeigten Reihenfolge. Wurde
+          // das aktuelle Item entfernt: das Item an derselben Stelle (bzw.
+          // das letzte) laden, jeweils ohne Autoplay.
+          const fallback = currentItemRemoved
+            ? Math.min(previousIndex, playlist.length - 1)
+            : playlistDisplayOrder()[0];
+          loadItemIntoPlayer(fallback, false);
         } else if (playlist.length === 0) {
           updateNowPlaying(null);
           updatePosDisplayVisibility(null);
@@ -1982,15 +2202,8 @@
 
     // ---------- Anzeige: aktueller Titel, Position, Play/Pause-Icon ----------
 
-    function formatPos(sec) {
-      sec = Math.max(0, Math.floor(sec || 0));
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
-      return `${m}:${String(s).padStart(2, '0')}`;
-    }
-
     function updatePosDisplay() {
-      posDisplay.textContent = `${formatPos(currentPositionSec)} / ${formatPos(currentDurationSec)}`;
+      posDisplay.textContent = `${formatTime(currentPositionSec)} / ${formatTime(currentDurationSec)}`;
       if (currentDurationSec && isFinite(currentDurationSec) && currentDurationSec > 0) {
         const pct = (currentPositionSec / currentDurationSec) * 100;
         markerBar.style.setProperty('--playhead', pct + '%');
@@ -2058,6 +2271,10 @@
       const supportsTimeline = !!item && item.provider !== 'instagram';
       markerBar.classList.toggle('hidden', !supportsTimeline);
       jumpToEl?.classList.toggle('hidden', !supportsTimeline);
+      // Mobil-only-Controls (Scrubber, "Von Anfang") genauso behandeln wie
+      // ihre Desktop-Gegenstücke – bei Instagram gibt es keine Zeitleiste.
+      mobileScrubber?.classList.toggle('hidden', !supportsTimeline);
+      restartBtn?.classList.toggle('hidden', !supportsTimeline);
       nextCommentBtn?.classList.toggle('hidden', !supportsTimeline);
       // Fullscreen-Button ausblenden, wenn weder die Fullscreen API für
       // .player-wrap noch (bei ARD/Video) der iOS-Safari-Fallback über
@@ -2108,7 +2325,7 @@
       nowPlayingEl?.classList.toggle('hidden', isSpotify);
       if (isSpotify) return;
 
-      nowPlayingTitle.textContent = item ? item.title : 'Noch keine Playlist-Einträge';
+      nowPlayingTitle.textContent = item ? item.title : 'Noch keine Playlist-Elemente';
       nowPlayingArtist.textContent = item ? item.artist_or_channel || '' : '';
       if (item && item.thumbnail_url) {
         nowPlayingThumb.src = item.thumbnail_url;
@@ -2169,7 +2386,7 @@
     const refreshedItemIds = new Set();
 
     function showArdLoadError() {
-      loadErrorEl.textContent = 'Fehler beim Laden des Videos. Prüfe die m3u8-URL und CORS-Header des Hosts.';
+      loadErrorEl.textContent = 'Das Video konnte nicht geladen werden. Der Link ist evtl. abgelaufen oder wird vom Anbieter blockiert';
       loadErrorEl.classList.remove('hidden');
     }
 
@@ -2228,7 +2445,7 @@
           { once: true }
         );
       } else {
-        loadErrorEl.textContent = 'HLS wird von diesem Browser nicht unterstützt.';
+        loadErrorEl.textContent = 'Dieses Videoformat (HLS) wird von deinem Browser nicht unterstützt';
         loadErrorEl.classList.remove('hidden');
       }
     }
@@ -2575,8 +2792,9 @@
     }
 
     function handleItemEnded() {
-      if (currentIndex + 1 < playlist.length) {
-        loadItemIntoPlayer(currentIndex + 1, true);
+      const nextIndex = neighborIndex(1);
+      if (nextIndex !== -1) {
+        loadItemIntoPlayer(nextIndex, true);
       } else {
         isPlaying = false;
         updatePlayPauseIcon();
@@ -2691,10 +2909,12 @@
     });
 
     prevItemBtn.addEventListener('click', () => {
-      if (currentIndex > 0) loadItemIntoPlayer(currentIndex - 1, true);
+      const prev = neighborIndex(-1);
+      if (prev !== -1) loadItemIntoPlayer(prev, true);
     });
     nextItemBtn.addEventListener('click', () => {
-      if (currentIndex + 1 < playlist.length) loadItemIntoPlayer(currentIndex + 1, true);
+      const next = neighborIndex(1);
+      if (next !== -1) loadItemIntoPlayer(next, true);
     });
 
     // ---------- Vollbild-/Theater-Modus ----------
@@ -2813,7 +3033,7 @@
       bubble.innerHTML = `
         <span class="comment-bubble-author" style="color: ${color}"></span>
         <span class="comment-bubble-body"></span>
-        <button type="button" class="link-btn comment-bubble-reply-btn">Antworten</button>
+        <button type="button" class="link-btn comment-bubble-reply-btn">antworten</button>
       `;
       bubble.querySelector('.comment-bubble-author').textContent = c.author_name;
       bubble.querySelector('.comment-bubble-body').innerHTML = linkifyWithPlaylistRefs(
@@ -2849,6 +3069,7 @@
 
     function renderMarkers() {
       markerBar.innerHTML = '';
+      mobileScrubber?.querySelectorAll('.scrubber-marker').forEach((m) => m.remove());
       const currentItem = playlist[currentIndex];
       if (!currentItem || currentItem.provider === 'instagram') return;
       const duration = currentDurationSec;
@@ -2865,12 +3086,52 @@
           marker.title = `${formatTime(c.timecode_sec)} – ${c.author_name}: ${c.body}`;
           marker.addEventListener('click', () => seekCurrentTo(c.timecode_sec));
           markerBar.appendChild(marker);
+          // Mobil ist die Marker-Leiste ausgeblendet (dort ersetzt der
+          // Scrubber sie) – die Kommentar-Positionen erscheinen dann als
+          // Punkte direkt auf dem Scrubber.
+          if (mobileScrubber) {
+            const dot = document.createElement('span');
+            dot.className = 'scrubber-marker';
+            dot.style.left = (c.timecode_sec / duration) * 100 + '%';
+            dot.style.background = resolveAuthorColor(c);
+            mobileScrubber.insertBefore(dot, mobileScrubberThumb || null);
+          }
         });
     }
 
     // ---------- Playlist rendern ----------
 
+    // Playlist-Indizes in der angezeigten Reihenfolge (siehe
+    // playlistSortOrder). Wiedergabe-Navigation (Start, Vor/Zurück,
+    // automatisches Weiterspielen) folgt genau dieser Reihenfolge, damit
+    // "Nächstes" immer der Eintrag unter dem aktuellen in der Liste ist.
+    function playlistDisplayOrder() {
+      const dir = playlistSortOrder === 'asc' ? 1 : -1;
+      return playlist
+        .map((item, index) => index)
+        .sort((a, b) => {
+          const diff = (playlist[a].added_at || 0) - (playlist[b].added_at || 0);
+          return dir * (diff || a - b);
+        });
+    }
+
+    // Playlist-Index des Nachbarn (delta = -1 / +1) des aktuellen Eintrags
+    // in der angezeigten Reihenfolge, oder -1, wenn es keinen gibt.
+    function neighborIndex(delta) {
+      const order = playlistDisplayOrder();
+      const pos = order.indexOf(currentIndex);
+      if (pos === -1) return -1;
+      const next = order[pos + delta];
+      return next === undefined ? -1 : next;
+    }
+
+    function updatePrevNextDisabled() {
+      prevItemBtn.disabled = neighborIndex(-1) === -1;
+      nextItemBtn.disabled = neighborIndex(1) === -1;
+    }
+
     function highlightCurrentPlaylistItem() {
+      updatePrevNextDisabled();
       playlistListEl.querySelectorAll('.playlist-item').forEach((el) => {
         el.classList.toggle('active', Number(el.dataset.index) === currentIndex);
       });
@@ -2879,11 +3140,10 @@
     function highlightActiveItemComments() {
       const currentItem = playlist[currentIndex];
       const activeItemId = currentItem ? currentItem.id : null;
-      // Die Umrandung soll erst ab drei Playlist-Items greifen – bei ein oder
-      // zwei Items ist ohnehin klar, welche Kommentare zum aktiven Item
-      // gehören (bzw. gibt es noch keine wirkliche Gruppierung), da wirkt der
-      // Rahmen nur wie unnötiges Rauschen.
-      const enoughItems = playlist.length >= 3;
+      // Hervorhebung ab zwei Einträgen – dieselbe Schwelle wie für die
+      // Gruppenüberschriften (siehe renderComments). Bei nur einem Eintrag
+      // gehören ohnehin alle Kommentare zum aktiven Eintrag.
+      const enoughItems = playlist.length >= 2;
       commentList.querySelectorAll('.comment[data-id]').forEach((el) => {
         const c = comments.find((cm) => String(cm.id) === el.dataset.id);
         const isActive = enoughItems && activeItemId != null && !!c && c.item_id === activeItemId;
@@ -2892,9 +3152,10 @@
     }
 
     function renderPlaylist() {
+      updatePrevNextDisabled();
       playlistListEl.innerHTML = '';
       if (playlist.length === 0) {
-        playlistListEl.innerHTML = '<p class="empty-state">Noch keine Playlist-Einträge – füge oben eine Quelle hinzu.</p>';
+        playlistListEl.innerHTML = '<p class="empty-state">Noch keine Playlist-Elemente – füge oben eine Quelle hinzu.</p>';
         return;
       }
       // Nach Hinzufüge-Datum sortieren (playlistSortOrder, Standard: neueste
@@ -2902,13 +3163,7 @@
       // Playlist-Position als Tiebreaker. currentIndex/Wiedergabereihenfolge
       // bleiben davon unberührt, da row.dataset.index weiterhin den echten
       // Array-Index trägt.
-      const dir = playlistSortOrder === 'asc' ? 1 : -1;
-      const order = playlist
-        .map((item, index) => index)
-        .sort((a, b) => {
-          const diff = (playlist[a].added_at || 0) - (playlist[b].added_at || 0);
-          return dir * (diff || a - b);
-        });
+      const order = playlistDisplayOrder();
       for (const index of order) {
         const item = playlist[index];
         const row = document.createElement('div');
@@ -2917,20 +3172,38 @@
         row.innerHTML = `
           ${
             item.thumbnail_url
-              ? `<img class="playlist-item-thumb" src="${item.thumbnail_url}" alt="">`
+              ? '<img class="playlist-item-thumb" alt="">'
               : '<span class="playlist-item-thumb playlist-item-thumb-placeholder"></span>'
           }
           <span class="playlist-item-meta">
             <span class="playlist-item-title"></span>
             <span class="playlist-item-artist"></span>
           </span>
-          ${
-            item.provider === 'spotify'
-              ? `<a class="playlist-item-provider playlist-item-provider-link" href="${spotifyOpenUrl(item)}" target="_blank" rel="noopener noreferrer" title="In Spotify öffnen" aria-label="In Spotify öffnen">${playlistItemIcon(item.provider)}</a>`
-              : `<span class="playlist-item-provider">${playlistItemIcon(item.provider)}</span>`
-          }
-          <button type="button" class="playlist-item-remove" aria-label="Entfernen" title="Entfernen">×</button>
+          <span class="playlist-item-provider"></span>
+          <button type="button" class="playlist-item-remove" aria-label="Aus der Playlist entfernen" title="Aus der Playlist entfernen">×</button>
         `;
+        // src per DOM-Property statt per HTML-String: thumbnail_url stammt bei
+        // YouTube-Items vom Client und darf kein Markup einschleusen können.
+        const thumbEl = row.querySelector('img.playlist-item-thumb');
+        if (thumbEl) thumbEl.src = item.thumbnail_url;
+        // Anbieter-Icon: verlinkt auf das Original, sofern eine Quell-URL
+        // bekannt ist (per DOM-Property statt HTML-String gesetzt, da
+        // source_url aus Nutzereingaben stammt).
+        const providerSlot = row.querySelector('.playlist-item-provider');
+        const openLink = itemOpenLink(item);
+        if (openLink) {
+          const a = document.createElement('a');
+          a.className = 'playlist-item-provider playlist-item-provider-link';
+          a.href = openLink.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.title = openLink.label;
+          a.setAttribute('aria-label', openLink.label);
+          a.textContent = playlistItemIcon(item.provider);
+          providerSlot.replaceWith(a);
+        } else {
+          providerSlot.textContent = playlistItemIcon(item.provider);
+        }
         row.querySelector('.playlist-item-title').textContent = item.title;
         row.querySelector('.playlist-item-artist').textContent = item.artist_or_channel || '';
         row.addEventListener('click', (e) => {
@@ -2939,7 +3212,7 @@
         });
         row.querySelector('.playlist-item-remove')?.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm('Dieses Item aus der Playlist entfernen?')) return;
+          if (!confirm('Dieses Element aus der Playlist entfernen?')) return;
           try {
             await apiFetch(`api/items/${item.id}`, { method: 'DELETE', headers: accessHeaders() });
             await loadItems();
@@ -3125,7 +3398,7 @@
       }
       const item = playlist[currentIndex];
       if (!item) {
-        commentErrorEl.textContent = 'Bitte zuerst eine Quelle zur Playlist hinzufügen.';
+        commentErrorEl.textContent = 'Bitte zuerst eine Quelle zur Playlist hinzufügen';
         commentErrorEl.classList.remove('hidden');
         return;
       }
@@ -3133,113 +3406,12 @@
       const isInstagram = item.provider === 'instagram';
       commentTimecodeField.classList.toggle('hidden', isInstagram);
       commentTimecodeInput.required = !isInstagram;
-      commentTimecodeInput.value = isInstagram ? '' : currentPositionSec.toFixed(1);
+      commentTimecodeInput.value = isInstagram ? '' : formatTimecodeInput(currentPositionSec);
       commentForm.classList.remove('hidden');
       commentBodyInput.focus();
     });
 
     submitOnCtrlEnter(commentBodyInput, commentForm);
-
-    // ---------- Emoji-Button + Flyout im Kommentarfeld ----------
-
-    const EMOJI_LIST = [
-      '😀', '😂', '🥲', '😅', '😊', '😍', '🤔', '😮',
-      '😢', '😭', '😡', '🥳', '😴', '🙄', '😱', '🤯',
-      '👍', '👎', '👏', '🙌', '🙏', '💪', '👀', '✌️',
-      '❤️', '🔥', '✨', '🎉', '💯', '⭐', '✅', '❌',
-    ];
-
-    // Browser können das native Emoji-Panel des Betriebssystems (Windows:
-    // Win + . / macOS: Ctrl + Cmd + Leertaste) nicht per Script öffnen. Der
-    // Button fokussiert deshalb das Textfeld – so landet ein per Tastenkürzel
-    // geöffnetes System-Panel direkt dort – und zeigt neben der Schnellauswahl
-    // einen Hinweis auf das passende Kürzel.
-    const NATIVE_EMOJI_SHORTCUT = (() => {
-      const platform = navigator.userAgentData?.platform || navigator.platform || '';
-      if (/win/i.test(platform)) return 'Win + .';
-      if (/mac/i.test(platform) && navigator.maxTouchPoints <= 1) return 'Ctrl + Cmd + Leertaste';
-      return null;
-    })();
-
-    // Hängt Emoji-Button + Flyout an eine Kommentar-Textarea. Die Textarea wird
-    // dafür in einen .comment-body-wrap eingepackt (Button sitzt unten rechts).
-    function wireEmojiButton(textarea) {
-      if (!textarea) return;
-      const wrap = document.createElement('div');
-      wrap.className = 'comment-body-wrap';
-      textarea.insertAdjacentElement('beforebegin', wrap);
-      wrap.appendChild(textarea);
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'emoji-btn';
-      btn.textContent = '😀';
-      btn.setAttribute('aria-label', 'Emoji einfügen');
-      btn.setAttribute('aria-haspopup', 'true');
-      btn.setAttribute('aria-expanded', 'false');
-      if (NATIVE_EMOJI_SHORTCUT) btn.title = `Emoji einfügen (alle Emojis: ${NATIVE_EMOJI_SHORTCUT})`;
-
-      const flyout = document.createElement('div');
-      flyout.className = 'emoji-flyout hidden';
-      flyout.setAttribute('role', 'menu');
-      flyout.setAttribute('aria-label', 'Emoji-Auswahl');
-
-      // Mousedown auf dem Button soll den Fokus nicht aus der Textarea ziehen,
-      // damit Cursorposition und ein offenes System-Panel erhalten bleiben.
-      btn.addEventListener('mousedown', (e) => e.preventDefault());
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const willOpen = flyout.classList.contains('hidden');
-        closeAllEmojiFlyouts();
-        if (!willOpen) return;
-        if (!flyout.childElementCount) buildEmojiFlyout(flyout, textarea);
-        flyout.classList.remove('hidden');
-        btn.setAttribute('aria-expanded', 'true');
-        textarea.focus();
-      });
-
-      wrap.append(btn, flyout);
-    }
-
-    function buildEmojiFlyout(flyout, textarea) {
-      EMOJI_LIST.forEach((emoji) => {
-        const option = document.createElement('button');
-        option.type = 'button';
-        option.className = 'emoji-flyout-option';
-        option.textContent = emoji;
-        option.setAttribute('role', 'menuitem');
-        option.addEventListener('mousedown', (e) => e.preventDefault());
-        option.addEventListener('click', () => {
-          insertAtCursor(textarea, emoji);
-          closeAllEmojiFlyouts();
-          textarea.focus();
-        });
-        flyout.appendChild(option);
-      });
-      if (NATIVE_EMOJI_SHORTCUT) {
-        const hint = document.createElement('p');
-        hint.className = 'emoji-flyout-hint';
-        hint.innerHTML = `Alle Emojis: <kbd>${NATIVE_EMOJI_SHORTCUT}</kbd>`;
-        flyout.appendChild(hint);
-      }
-    }
-
-    function closeAllEmojiFlyouts() {
-      document.querySelectorAll('.emoji-flyout:not(.hidden)').forEach((flyout) => {
-        flyout.classList.add('hidden');
-        flyout.parentElement.querySelector('.emoji-btn')?.setAttribute('aria-expanded', 'false');
-      });
-    }
-
-    wireEmojiButton(commentBodyInput);
-
-    function insertAtCursor(textarea, text) {
-      const start = textarea.selectionStart ?? textarea.value.length;
-      const end = textarea.selectionEnd ?? textarea.value.length;
-      textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
-      const newPos = start + text.length;
-      textarea.setSelectionRange(newPos, newPos);
-    }
 
     // Klappt ein rechts-verankertes Popover (Emoji-Flyout, Reaction-Picker)
     // nach links um, falls es sonst über den rechten Viewport-Rand
@@ -3255,12 +3427,7 @@
       }
     }
 
-    // Delegiert, damit dynamisch erzeugte Antwort-/Bearbeiten-Formulare keine
-    // eigenen document-Listener anhäufen.
-    document.addEventListener('click', (e) => {
-      if (e.target.closest?.('.emoji-flyout')) return;
-      closeAllEmojiFlyouts();
-    });
+    wireEmojiPicker(commentBodyInput);
 
     // Einmaliger, delegierter Listener statt eines neuen document-Listeners
     // pro Kommentar/Reaction-Picker (siehe buildReactionsRow) – verhindert,
@@ -3271,10 +3438,6 @@
         if (wrap && wrap.contains(e.target)) return;
         picker.classList.add('hidden');
       });
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeAllEmojiFlyouts();
     });
 
     commentCancelBtn.addEventListener('click', () => {
@@ -3297,11 +3460,17 @@
       const body = commentBodyInput.value.trim();
       const image = commentImageAttach.getValue();
       if (!body && !image) {
-        commentErrorEl.textContent = 'Bitte Text eingeben oder ein Bild anhängen.';
+        commentErrorEl.textContent = 'Bitte Text eingeben oder ein Bild anhängen';
         commentErrorEl.classList.remove('hidden');
         return;
       }
-      const timecode_sec = item.provider === 'instagram' ? null : parseFloat(commentTimecodeInput.value);
+      const timecode_sec = item.provider === 'instagram' ? null : parseTimecode(commentTimecodeInput.value);
+      if (item.provider !== 'instagram' && (timecode_sec === null || Number.isNaN(timecode_sec))) {
+        commentErrorEl.textContent = 'Ungültiger Zeitpunkt – z. B. 90 oder 1:30';
+        commentErrorEl.classList.remove('hidden');
+        commentTimecodeInput.focus();
+        return;
+      }
       try {
         await createTopLevelComment(timecode_sec, body, image);
         commentForm.classList.add('hidden');
@@ -3309,8 +3478,7 @@
         commentImageAttach.reset(null);
         closeAllEmojiFlyouts();
       } catch (err) {
-        commentErrorEl.textContent = err.message;
-        commentErrorEl.classList.remove('hidden');
+        alert('Kommentar konnte nicht gesendet werden: ' + err.message);
       }
     });
 
@@ -3442,7 +3610,7 @@
 
     function itemLabel(itemId) {
       const item = playlist.find((it) => it.id === itemId);
-      return item ? item.title : '(gelöschtes Item)';
+      return item ? item.title : '(gelöschtes Element)';
     }
 
     async function submitMixReply(parentId, body, formEl, image) {
@@ -3485,7 +3653,7 @@
       try {
         const updated = await apiFetch(`api/comments/${commentId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...accessHeaders() },
           body: JSON.stringify({ body, image: image || null, author_name: authorName }),
         });
         if (comment) {
@@ -3545,7 +3713,7 @@
       try {
         const res = await apiFetch(`api/comments/${commentId}/reactions`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...accessHeaders() },
           body: JSON.stringify({ emoji, author_name: authorName }),
         });
         comment.reactions = res.reactions || comment.reactions;
@@ -3558,7 +3726,7 @@
           if (idx !== -1) comment.reactions.splice(idx, 1);
         }
         refreshReactionsUI(comment);
-        alert('Reaction konnte nicht gesetzt werden: ' + err.message);
+        alert('Reaktion konnte nicht gesetzt werden: ' + err.message);
       }
     }
 
@@ -3593,7 +3761,8 @@
       const addBtn = document.createElement('button');
       addBtn.type = 'button';
       addBtn.className = 'reaction-add-btn';
-      addBtn.title = 'Reaction hinzufügen';
+      addBtn.title = 'Reaktion hinzufügen';
+      addBtn.setAttribute('aria-label', 'Reaktion hinzufügen');
       addBtn.textContent = '😊+';
       const picker = document.createElement('div');
       picker.className = 'reaction-picker hidden';
@@ -3629,7 +3798,11 @@
     }
 
     async function deleteMixComment(id) {
-      if (!confirm('Diesen Kommentar wirklich löschen?')) return;
+      const hasReplies = comments.some((c) => c.parent_id === id);
+      const question = hasReplies
+        ? 'Diesen Kommentar samt Antworten wirklich löschen?'
+        : 'Diesen Kommentar wirklich löschen?';
+      if (!confirm(question)) return;
       // Antworten hängen serverseitig per ON DELETE CASCADE am Elternkommentar
       // (siehe server.js) – beim optimistischen Entfernen daher genauso
       // mitnehmen, damit der Client-Stand konsistent bleibt.
@@ -3642,7 +3815,7 @@
       try {
         await apiFetch(`api/comments/${id}`, {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+          headers: { 'Content-Type': 'application/json', ...accessHeaders() },
           body: JSON.stringify({ author_name: authorName }),
         });
       } catch (err) {
@@ -3671,7 +3844,7 @@
       wirePasteImage(textarea, imageAttach);
       submitOnCtrlEnter(textarea, form);
       wireMentionAutocomplete(textarea, () => playlist);
-      wireEmojiButton(textarea);
+      wireEmojiPicker(textarea);
 
       function openEdit() {
         textarea.value = getBody();
@@ -3770,11 +3943,14 @@
         <div class="comment-body">${linkifyWithPlaylistRefs(escapeHtml(c.body), playlist)}</div>
         ${c.image ? '<div class="comment-image-wrap"><img class="comment-image" alt="Bild im Kommentar"></div>' : ''}
         <div class="replies"></div>
-        <button type="button" class="link-btn reply-toggle">Antworten</button>
+        <button type="button" class="link-btn reply-toggle">antworten</button>
         <form class="reply-form hidden">
           <textarea class="reply-body" maxlength="2000" rows="2" placeholder="Antwort …"></textarea>
           <div class="reply-image-attach"></div>
-          <button type="submit">Senden</button>
+          <div class="form-actions">
+            <button type="submit">Senden</button>
+            <button type="button" class="secondary reply-cancel-btn">Abbrechen</button>
+          </div>
         </form>
       `;
       if (c.image) {
@@ -3794,10 +3970,10 @@
         c.timecode_sec == null
           ? showItemLabel
             ? itemLabel(c.item_id)
-            : '💬'
+            : '▶ abspielen'
           : showItemLabel
-          ? `${itemLabel(c.item_id)} · ${formatPos(c.timecode_sec)}`
-          : formatPos(c.timecode_sec);
+          ? `${itemLabel(c.item_id)} · ${formatTime(c.timecode_sec)}`
+          : formatTime(c.timecode_sec);
       item.querySelector('.timecode-link').addEventListener('click', () => {
         const idx = playlist.findIndex((it) => it.id === c.item_id);
         if (idx === -1) return;
@@ -3825,7 +4001,13 @@
       wirePasteImage(replyForm.querySelector('.reply-body'), replyImageAttach);
       submitOnCtrlEnter(replyForm.querySelector('.reply-body'), replyForm);
       wireMentionAutocomplete(replyForm.querySelector('.reply-body'), () => playlist);
-      wireEmojiButton(replyForm.querySelector('.reply-body'));
+      wireEmojiPicker(replyForm.querySelector('.reply-body'));
+      replyForm.querySelector('.reply-cancel-btn').addEventListener('click', () => {
+        replyForm.reset();
+        replyImageAttach.reset(null);
+        replyForm.classList.add('hidden');
+        closeAllEmojiFlyouts();
+      });
 
       replyToggle.addEventListener('click', () => {
         if (!authorName) {
@@ -3901,7 +4083,9 @@
         if (!groups.has(c.item_id)) groups.set(c.item_id, []);
         groups.get(c.item_id).push(c);
       });
-      const orderedItemIds = playlist.map((it) => it.id).filter((id) => groups.has(id));
+      const orderedItemIds = playlistDisplayOrder()
+        .map((idx) => playlist[idx].id)
+        .filter((id) => groups.has(id));
       Array.from(groups.keys()).forEach((id) => {
         if (!orderedItemIds.includes(id)) orderedItemIds.push(id);
       });
@@ -3924,7 +4108,7 @@
           header.disabled = !item;
           header.innerHTML = `<span class="comment-group-icon"></span><span class="comment-group-title"></span>`;
           header.querySelector('.comment-group-icon').textContent = item ? playlistItemIcon(item.provider) : '❔';
-          header.querySelector('.comment-group-title').textContent = item ? item.title : '(gelöschtes Item)';
+          header.querySelector('.comment-group-title').textContent = item ? item.title : '(gelöschtes Element)';
           if (item) {
             header.addEventListener('click', () => {
               const idx = playlist.findIndex((it) => it.id === itemId);
@@ -3990,7 +4174,7 @@
           const providerIcons = (s.providers || []).map(playlistItemIcon).join(' ');
           row.innerHTML = `
             <span class="stream-list-title">${lock}${escapeHtml(s.title)}</span>
-            <span class="stream-list-meta">${providerIcons} · ${s.item_count} Item(s)</span>
+            <span class="stream-list-meta">${providerIcons ? `${providerIcons} · ` : ''}${s.item_count} ${s.item_count === 1 ? 'Element' : 'Elemente'}</span>
             <span class="stream-list-date">${formatDate(s.created_at)}</span>
           `;
           listEl.appendChild(row);

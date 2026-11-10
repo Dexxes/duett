@@ -58,7 +58,7 @@ volumes:
 2. Nach dem Anlegen werden zwei Links angezeigt:
    - **Share-Link** (`/s/<id>`) – zum Teilen mit allen, die kommentieren sollen.
    - **Admin-Link** (`/s/<id>?admin=<token>`) – erlaubt zusätzlich das Löschen
-     von Kommentaren, Playlist-Items und der gesamten Session. Nicht weitergeben!
+     beliebiger Kommentare und der gesamten Session. Nicht weitergeben!
 3. Auf der Session-Seite: aktives Playlist-Item abspielen, per Button
    „Kommentar an aktueller Stelle" einen Zeitstempel-Kommentar hinterlassen,
    auf Kommentare antworten, per Klick auf einen Zeitstempel dorthin springen.
@@ -209,7 +209,7 @@ verloren gegangen). Kommentare hängen am jeweils aktiven Playlist-Item
   tokenloser oEmbed-Zugriff liefert (anders als bei TikTok) keinen echten
   Post-Titel, Autor oder Thumbnail; das eigentliche Reel/Bild erscheint erst
   beim Abspielen selbst.
-- Playlist-Items lassen sich im Admin-Modus einzeln wieder entfernen.
+- Playlist-Elemente lassen sich von allen mit Zugriff auf die Session einzeln wieder entfernen.
 - Enthält ein Kommentar oder eine Antwort selbst einen Spotify-, YouTube-,
   TikTok- oder Instagram-Link, wird der zugehörige Titel beim Absenden
   automatisch der Playlist hinzugefügt (kein Duplikat, falls er schon
@@ -290,8 +290,6 @@ Duett/
     index.html          Startseite: dreischrittiger Assistent zum Anlegen einer Session
     session.html         Session-Seite: Playlist + Player (ARD/Spotify/YouTube/TikTok/Instagram) + Kommentare
     overview.html        Passwortgeschützte Übersicht aller Sessions (siehe OVERVIEW_PASSWORD)
-    stream.html, mix.html  Nicht mehr verlinkt/geroutet (Vorgänger von session.html, technisch noch
-                            vorhanden, aber funktionslos)
     app.js
     style.css
   package.json
