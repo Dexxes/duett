@@ -951,7 +951,8 @@ video {
   flex: 1;
 }
 
-.modal-box #name-modal-skip {
+.modal-box #name-modal-skip,
+.modal-box #item-title-modal-cancel {
   margin-top: 12px;
 }
 

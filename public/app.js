@@ -678,6 +678,61 @@
     return data;
   }
 
+  // Optionales Titel-Modal für TikTok-/Instagram-Links (Startseite und
+  // Session-Seite, siehe #item-title-modal in index.html/session.html).
+  // Löst mit { cancelled: true } auf, wenn abgebrochen wurde (Abbrechen,
+  // Escape, Klick neben das Modal), sonst mit { cancelled: false, title }
+  // – title leer heißt: automatisch ermittelten Titel verwenden.
+  function askItemTitle(provider, initialValue) {
+    const modal = document.getElementById('item-title-modal');
+    if (!modal) return Promise.resolve({ cancelled: false, title: '' });
+    const form = document.getElementById('item-title-modal-form');
+    const input = document.getElementById('item-title-modal-input');
+    const cancelBtn = document.getElementById('item-title-modal-cancel');
+    const heading = document.getElementById('item-title-modal-heading');
+    heading.textContent =
+      provider === 'instagram' ? 'Titel für den Instagram-Post' : 'Titel für das TikTok-Video';
+    input.value = initialValue || '';
+    modal.classList.remove('hidden');
+    setTimeout(() => input.focus(), 0);
+
+    return new Promise((resolve) => {
+      function finish(result) {
+        modal.classList.add('hidden');
+        form.removeEventListener('submit', onSubmit);
+        cancelBtn.removeEventListener('click', onCancel);
+        modal.removeEventListener('click', onOverlayClick);
+        document.removeEventListener('keydown', onKeydown);
+        resolve(result);
+      }
+      function onSubmit(e) {
+        e.preventDefault();
+        finish({ cancelled: false, title: input.value.trim() });
+      }
+      function onCancel() {
+        finish({ cancelled: true });
+      }
+      function onOverlayClick(e) {
+        if (e.target === modal) finish({ cancelled: true });
+      }
+      function onKeydown(e) {
+        if (e.key === 'Escape') finish({ cancelled: true });
+      }
+      form.addEventListener('submit', onSubmit);
+      cancelBtn.addEventListener('click', onCancel);
+      modal.addEventListener('click', onOverlayClick);
+      document.addEventListener('keydown', onKeydown);
+    });
+  }
+
+  // Provider ('tiktok'/'instagram'), für den beim Hinzufügen ein eigener
+  // Titel abgefragt wird – null für alle anderen Quellen.
+  function titleableProvider(input) {
+    if (isTikTokInput(input)) return 'tiktok';
+    if (isInstagramInput(input)) return 'instagram';
+    return null;
+  }
+
   // =========================================================
   // Provider-Erkennung + Resolver-Helper (gemeinsam genutzt von Startseite
   // und Session-Seite). ARD-Mediathek/m3u8 ist seit der Vereinigung von
@@ -1661,14 +1716,36 @@
       if (focusEl) setTimeout(() => focusEl.focus(), 0);
     }
 
+    // Eigener Titel für eine TikTok-/Instagram-Erstquelle – gilt nur für den
+    // Link, für den er abgefragt wurde (wird der Link danach geändert, wird
+    // beim nächsten "Weiter" erneut gefragt).
+    let sourceTitle = { link: '', title: '' };
+    let askingTitle = false;
+
     document.querySelectorAll('.wizard-next').forEach((btn) => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         if (currentStep === 1 && !titleInput.value.trim()) {
           titleError?.classList.remove('hidden');
           titleInput.focus();
           return;
         }
         titleError?.classList.add('hidden');
+        if (currentStep === 2) {
+          const link = mixSourceInput.value.trim();
+          const provider = titleableProvider(link);
+          if (provider) {
+            if (askingTitle) return;
+            askingTitle = true;
+            const prefill = sourceTitle.link === link ? sourceTitle.title : '';
+            const result = await askItemTitle(provider, prefill);
+            askingTitle = false;
+            if (result.cancelled) {
+              mixSourceInput.focus();
+              return;
+            }
+            sourceTitle = { link, title: result.title };
+          }
+        }
         showStep(Number(btn.dataset.goto));
       });
     });
@@ -1719,6 +1796,9 @@
             // in server.js) und liefert bei einem wirklich unbekannten Link
             // einen sprechenden Fehler zurück.
             payload.url = sourceInput;
+            if (titleableProvider(sourceInput) && sourceTitle.link === sourceInput && sourceTitle.title) {
+              payload.custom_title = sourceTitle.title;
+            }
           }
         }
 
@@ -1765,6 +1845,7 @@
 
     createAnotherBtn?.addEventListener('click', () => {
       form.reset();
+      sourceTitle = { link: '', title: '' };
       form.classList.remove('hidden');
       wizardProgress.classList.remove('hidden');
       resultEl.classList.add('hidden');
@@ -3376,8 +3457,32 @@
       e.preventDefault();
       const value = addItemInput.value.trim();
       if (!value) return;
-      addItemStatus.classList.remove('hidden');
       addItemStatus.classList.remove('error-text');
+
+      // TikTok/Instagram: erst prüfen, ob der Link schon in der Playlist
+      // steht (dann kein Titel-Modal, sondern Hinweis), sonst optional
+      // nach einem eigenen Titel fragen.
+      let customTitle = '';
+      const titleProvider = titleableProvider(value);
+      if (titleProvider) {
+        const href = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+        const existing = findPlaylistItemForLink({ url: href, provider: titleProvider }, playlist);
+        if (existing) {
+          showAlreadyInPlaylist([existing]);
+          return;
+        }
+        if (addItemForm.dataset.askingTitle) return;
+        addItemForm.dataset.askingTitle = '1';
+        const result = await askItemTitle(titleProvider, '');
+        delete addItemForm.dataset.askingTitle;
+        if (result.cancelled) {
+          addItemInput.focus();
+          return;
+        }
+        customTitle = result.title;
+      }
+
+      addItemStatus.classList.remove('hidden');
       addItemStatus.textContent = 'Löse Quelle auf …';
       try {
         let payload;
@@ -3386,21 +3491,42 @@
           payload = { items };
         } else {
           payload = { url: value };
+          if (customTitle) payload.custom_title = customTitle;
         }
-        await apiFetch(`api/streams/${streamId}/items`, {
+        const countBefore = playlist.length;
+        const result = await apiFetch(`api/streams/${streamId}/items`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...accessHeaders() },
           body: JSON.stringify(payload),
         });
         addItemInput.value = '';
-        addItemStatus.textContent = 'Hinzugefügt ✓';
         await loadItems();
+        const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
+        if (skipped.length > 0 && playlist.length <= countBefore) {
+          // Nichts Neues hinzugefügt: Link stand schon in der Playlist
+          // (z. B. TikTok-Kurzlink, der sich clientseitig nicht abgleichen
+          // ließ) – eigener Titel wird ignoriert.
+          showAlreadyInPlaylist(skipped);
+          return;
+        }
+        addItemStatus.textContent =
+          skipped.length > 0 ? `Hinzugefügt ✓ (${skipped.length} bereits vorhanden)` : 'Hinzugefügt ✓';
         setTimeout(() => addItemStatus.classList.add('hidden'), 2000);
       } catch (err) {
         addItemStatus.textContent = err.message;
         addItemStatus.classList.add('error-text');
       }
     });
+
+    function showAlreadyInPlaylist(items) {
+      const titles = items.map((it) => `„${it.title}“`).join(', ');
+      addItemStatus.textContent =
+        items.length === 1
+          ? `Dieser Link ist bereits mit dem Titel ${titles} in der Playlist vorhanden.`
+          : `Diese Links sind bereits in der Playlist vorhanden: ${titles}`;
+      addItemStatus.classList.add('error-text');
+      addItemStatus.classList.remove('hidden');
+    }
 
     // ---------- Medien-Links in einem Kommentar -> automatisch zur Playlist ----------
 

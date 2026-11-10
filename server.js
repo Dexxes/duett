@@ -459,6 +459,29 @@ function isArdMediathekUrl(rawUrl) {
   }
 }
 
+// Prüft einen optional beim Hinzufügen vergebenen eigenen Titel (nur für
+// TikTok/Instagram vorgesehen, siehe Titel-Modal in app.js). Leer/nicht
+// angegeben -> null, d. h. der automatisch ermittelte Titel bleibt.
+function normalizeCustomTitle(raw) {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'string') throw new Error('Ungültiger Titel');
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > MAX_ITEM_TITLE_LEN) {
+    throw new Error(`Titel ist zu lang (max. ${MAX_ITEM_TITLE_LEN} Zeichen)`);
+  }
+  return trimmed;
+}
+
+// Überschreibt den automatisch ermittelten Titel (TikTok-Beschreibung bzw.
+// Instagram-Fallback "Instagram-Reel · <shortcode>"), falls ein eigener
+// Titel angegeben wurde. Keine eigene Spalte: der eigene Titel ersetzt den
+// automatischen dauerhaft.
+function applyCustomTitle(resolvedItems, customTitle) {
+  if (!customTitle) return resolvedItems;
+  return resolvedItems.map((item) => ({ ...item, title: customTitle }));
+}
+
 // Löst eine Quelle (Spotify-/TikTok-/Instagram-/Mediathek-URL oder ein
 // direkter m3u8-/Video-Link, serverseitig aufgelöst, ODER bereits
 // clientseitig aufgelöste YouTube-Item-Liste) zu einem Array fertiger
@@ -468,7 +491,7 @@ function isArdMediathekUrl(rawUrl) {
 // ARD+Content-Mix). TikTok- und Instagram-Links liefern (wie Spotify-Track-
 // und ARD-Links) immer genau ein Item – keiner dieser drei kennt ein
 // Playlist-/Album-Konzept wie Spotify (Album/Playlist) oder YouTube.
-async function resolveSourceToItems(url, items) {
+async function resolveSourceToItems(url, items, customTitle) {
   if (Array.isArray(items) && items.length > 0) {
     if (items.length > MAX_CLIENT_ITEMS_PER_REQUEST) {
       throw new Error(`Zu viele Elemente auf einmal (max. ${MAX_CLIENT_ITEMS_PER_REQUEST})`);
@@ -478,10 +501,10 @@ async function resolveSourceToItems(url, items) {
   if (typeof url === 'string' && url.trim()) {
     const trimmed = url.trim();
     if (looksLikeTikTokUrl(trimmed)) {
-      return await resolveTikTok(trimmed);
+      return applyCustomTitle(await resolveTikTok(trimmed), customTitle);
     }
     if (looksLikeInstagramUrl(trimmed)) {
-      return await resolveInstagram(trimmed);
+      return applyCustomTitle(await resolveInstagram(trimmed), customTitle);
     }
     if (parseSpotifyInput(trimmed)) {
       return await resolveSpotify(trimmed);
@@ -529,12 +552,16 @@ async function resolveSourceToItems(url, items) {
 // Playlist-Eintrag erzeugt (siehe automatisches Hinzufügen aus Kommentaren
 // in app.js).
 function insertPlaylistItems(streamId, items) {
-  const existingKeys = new Set(
+  const existingByKey = new Map(
     db
-      .prepare('SELECT provider, provider_uri FROM playlist_items WHERE stream_id = ?')
+      .prepare('SELECT id, provider, provider_uri, title FROM playlist_items WHERE stream_id = ?')
       .all(streamId)
-      .map((r) => `${r.provider}:${r.provider_uri}`)
+      .map((r) => [`${r.provider}:${r.provider_uri}`, r])
   );
+  const existingKeys = new Set(existingByKey.keys());
+  // Bereits vorhandene (und deshalb übersprungene) Items – damit der Client
+  // melden kann, dass der Link schon mit Titel X in der Playlist steht.
+  const skipped = [];
 
   const maxPos = db
     .prepare('SELECT COALESCE(MAX(position), -1) AS m FROM playlist_items WHERE stream_id = ?')
@@ -547,7 +574,11 @@ function insertPlaylistItems(streamId, items) {
     let pos = maxPos + 1;
     for (const item of rows) {
       const key = `${item.provider}:${item.provider_uri}`;
-      if (existingKeys.has(key)) continue;
+      if (existingKeys.has(key)) {
+        const existing = existingByKey.get(key);
+        if (existing) skipped.push({ id: existing.id, provider: existing.provider, title: existing.title });
+        continue;
+      }
       existingKeys.add(key);
       insert.run(
         streamId,
@@ -565,6 +596,7 @@ function insertPlaylistItems(streamId, items) {
     }
   });
   insertMany(items);
+  return skipped;
 }
 
 const PLAYLIST_ITEM_COLUMNS =
@@ -1156,7 +1188,7 @@ app.post('/api/resolve-ard', writeLimiter, async (req, res) => {
 // "+ Hinzufügen" auf der Session-Seite bekommen (siehe POST
 // /api/streams/:id/items), genau wie eine mit Erstquelle angelegte Session.
 app.post('/api/streams', writeLimiter, async (req, res) => {
-  const { title, slug, url, items, password } = req.body || {};
+  const { title, slug, url, items, password, custom_title } = req.body || {};
 
   if (typeof title !== 'string' || !title.trim() || title.length > MAX_TITLE_LEN) {
     return res.status(400).json({ error: `Titel fehlt oder zu lang (max. ${MAX_TITLE_LEN} Zeichen)` });
@@ -1177,7 +1209,7 @@ app.post('/api/streams', writeLimiter, async (req, res) => {
   const hasSource = (typeof url === 'string' && url.trim()) || (Array.isArray(items) && items.length > 0);
   if (hasSource) {
     try {
-      initialItems = await resolveSourceToItems(url, items);
+      initialItems = await resolveSourceToItems(url, items, normalizeCustomTitle(custom_title));
     } catch (err) {
       return res.status(400).json({ error: err.message || 'Quelle konnte nicht aufgelöst werden' });
     }
@@ -1395,21 +1427,23 @@ app.post('/api/streams/:id/items', writeLimiter, async (req, res) => {
   const stream = getAuthorizedStream(req, res);
   if (!stream) return;
 
-  const { url, items } = req.body || {};
+  const { url, items, custom_title } = req.body || {};
   let resolved;
   try {
-    resolved = await resolveSourceToItems(url, items);
+    resolved = await resolveSourceToItems(url, items, normalizeCustomTitle(custom_title));
   } catch (err) {
     return res.status(400).json({ error: err.message || 'Quelle konnte nicht aufgelöst werden' });
   }
 
-  insertPlaylistItems(stream.id, resolved);
+  const skipped = insertPlaylistItems(stream.id, resolved);
 
   const rows = db
     .prepare(`SELECT ${PLAYLIST_ITEM_COLUMNS} FROM playlist_items WHERE stream_id = ? ORDER BY position ASC`)
     .all(stream.id);
 
-  res.status(201).json(rows);
+  // skipped: Items, die schon in der Playlist standen (Duplikat, nicht
+  // erneut eingefügt, eigener Titel wird dann ignoriert).
+  res.status(201).json({ items: rows, skipped });
 });
 
 // Item entfernen: wie das Hinzufügen (POST .../items) auch von anderen
