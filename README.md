@@ -290,8 +290,6 @@ Duett/
     index.html          Startseite: dreischrittiger Assistent zum Anlegen einer Session
     session.html         Session-Seite: Playlist + Player (ARD/Spotify/YouTube/TikTok/Instagram) + Kommentare
     overview.html        Passwortgeschützte Übersicht aller Sessions (siehe OVERVIEW_PASSWORD)
-    stream.html, mix.html  Nicht mehr verlinkt/geroutet (Vorgänger von session.html, technisch noch
-                            vorhanden, aber funktionslos)
     app.js
     style.css
   package.json

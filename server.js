@@ -276,7 +276,7 @@ function validateImageDataUrl(value) {
 }
 
 // Feste Farbpalette zur Selbst-Kennzeichnung neben dem Anzeigenamen (siehe
-// name-modal in stream.html/mix.html). Bewusst keine freie Farbwahl, damit
+// name-modal in session.html). Bewusst keine freie Farbwahl, damit
 // die Lesbarkeit auf dem dunklen Hintergrund garantiert ist und der Wert
 // serverseitig strikt gegen eine Whitelist geprüft werden kann. Muss mit der
 // Palette in public/app.js (AUTHOR_COLOR_PALETTE) synchron gehalten werden.
@@ -400,18 +400,18 @@ function isValidSlug(str) {
 
 function sanitizeClientItem(raw) {
   if (!raw || typeof raw !== 'object') {
-    throw new Error('Ungültiges Playlist-Item');
+    throw new Error('Ungültiger Playlist-Eintrag');
   }
   const { provider, provider_uri, title, artist_or_channel, duration_ms, thumbnail_url } = raw;
 
   if (provider !== 'youtube') {
-    throw new Error('Nur clientseitig aufgelöste YouTube-Items sind hier erlaubt');
+    throw new Error('Nur clientseitig aufgelöste YouTube-Einträge sind hier erlaubt');
   }
   if (typeof provider_uri !== 'string' || !provider_uri.trim() || provider_uri.length > MAX_ITEM_URI_LEN) {
     throw new Error('provider_uri fehlt oder zu lang');
   }
   if (typeof title !== 'string' || !title.trim() || title.length > MAX_ITEM_TITLE_LEN) {
-    throw new Error('Item-Titel fehlt oder zu lang');
+    throw new Error('Titel des Eintrags fehlt oder ist zu lang');
   }
 
   return {
@@ -467,7 +467,7 @@ function isArdMediathekUrl(rawUrl) {
 async function resolveSourceToItems(url, items) {
   if (Array.isArray(items) && items.length > 0) {
     if (items.length > MAX_CLIENT_ITEMS_PER_REQUEST) {
-      throw new Error(`Zu viele Items auf einmal (max. ${MAX_CLIENT_ITEMS_PER_REQUEST})`);
+      throw new Error(`Zu viele Einträge auf einmal (max. ${MAX_CLIENT_ITEMS_PER_REQUEST})`);
     }
     return items.map(sanitizeClientItem);
   }
@@ -615,7 +615,7 @@ function getAuthorizedStream(req, res) {
     )
     .get(req.params.id);
   if (!stream) {
-    res.status(404).json({ error: 'Stream nicht gefunden' });
+    res.status(404).json({ error: 'Session nicht gefunden' });
     return null;
   }
   if (!checkStreamAccess(req, res, stream)) return null;
@@ -626,7 +626,7 @@ function requireAdmin(req, res, streamId) {
   const token = req.get('X-Admin-Token') || req.body?.admin_token || req.query?.admin_token;
   const row = db.prepare('SELECT admin_token FROM streams WHERE id = ?').get(streamId);
   if (!row) {
-    res.status(404).json({ error: 'Stream nicht gefunden' });
+    res.status(404).json({ error: 'Session nicht gefunden' });
     return false;
   }
   if (!token || token !== row.admin_token) {
@@ -1091,7 +1091,7 @@ const writeLimiter = rateLimit({
   limit: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Zu viele Anfragen, bitte kurz warten.' },
+  message: { error: 'Zu viele Anfragen, bitte kurz warten' },
 });
 
 // Strengeres Limit speziell für Login-Versuche gegen ein Session-Passwort
@@ -1101,7 +1101,7 @@ const authLimiter = rateLimit({
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Zu viele Versuche, bitte kurz warten.' },
+  message: { error: 'Zu viele Versuche, bitte kurz warten' },
 });
 
 // ---------- API ----------
@@ -1148,7 +1148,7 @@ app.post('/api/streams', writeLimiter, async (req, res) => {
   const { title, slug, url, items, password } = req.body || {};
 
   if (typeof title !== 'string' || !title.trim() || title.length > MAX_TITLE_LEN) {
-    return res.status(400).json({ error: `Titel fehlt oder zu lang (max ${MAX_TITLE_LEN} Zeichen)` });
+    return res.status(400).json({ error: `Titel fehlt oder zu lang (max. ${MAX_TITLE_LEN} Zeichen)` });
   }
 
   // Passwort ist optional und kann bereits beim Anlegen vergeben werden
@@ -1184,7 +1184,7 @@ app.post('/api/streams', writeLimiter, async (req, res) => {
     }
     const existing = db.prepare('SELECT id FROM streams WHERE id = ?').get(trimmedSlug);
     if (existing) {
-      return res.status(409).json({ error: 'Dieser Kurzlink ist bereits vergeben.' });
+      return res.status(409).json({ error: 'Dieser Kurzlink ist bereits vergeben' });
     }
     id = trimmedSlug;
   } else {
@@ -1251,7 +1251,7 @@ app.put('/api/streams/:id/notes', writeLimiter, (req, res) => {
 
   const lines = validateNotesLines((req.body || {}).lines);
   if (!lines) {
-    return res.status(400).json({ error: `Ungültige Notizen (max ${MAX_NOTES_LINES} Zeilen, max ${MAX_NOTES_LEN} Zeichen gesamt)` });
+    return res.status(400).json({ error: `Ungültige Notizen (max. ${MAX_NOTES_LINES} Zeilen, max. ${MAX_NOTES_LEN} Zeichen gesamt)` });
   }
 
   db.prepare('UPDATE streams SET notes = ? WHERE id = ?').run(serializeNotesLines(lines), req.params.id);
@@ -1264,7 +1264,7 @@ app.post('/api/streams/:id/auth', authLimiter, (req, res) => {
     .prepare('SELECT id, password_hash FROM streams WHERE id = ?')
     .get(req.params.id);
   if (!stream) {
-    return res.status(404).json({ error: 'Stream nicht gefunden' });
+    return res.status(404).json({ error: 'Session nicht gefunden' });
   }
   if (!stream.password_hash) {
     return res.status(400).json({ error: 'Diese Session ist nicht passwortgeschützt' });
@@ -1289,7 +1289,7 @@ app.post('/api/streams/:id/auth', authLimiter, (req, res) => {
 app.put('/api/streams/:id/password', writeLimiter, (req, res) => {
   const stream = db.prepare('SELECT id FROM streams WHERE id = ?').get(req.params.id);
   if (!stream) {
-    return res.status(404).json({ error: 'Stream nicht gefunden' });
+    return res.status(404).json({ error: 'Session nicht gefunden' });
   }
   if (!requireAdmin(req, res, req.params.id)) return;
 
@@ -1407,15 +1407,18 @@ app.post('/api/streams/:id/items', writeLimiter, async (req, res) => {
 app.delete('/api/items/:iid', writeLimiter, (req, res) => {
   const item = db.prepare('SELECT id, stream_id FROM playlist_items WHERE id = ?').get(req.params.iid);
   if (!item) {
-    return res.status(404).json({ error: 'Item nicht gefunden' });
+    return res.status(404).json({ error: 'Eintrag nicht gefunden' });
   }
   const stream = db
     .prepare('SELECT id, admin_token, password_hash FROM streams WHERE id = ?')
     .get(item.stream_id);
   if (!stream) {
-    return res.status(404).json({ error: 'Stream nicht gefunden' });
+    return res.status(404).json({ error: 'Session nicht gefunden' });
   }
-  if (!checkStreamAccess(req, res, stream)) return;
+  // Entfernen von Playlist-Einträgen ist (wie Löschen der Session und
+  // fremder Kommentare) dem Admin-Link vorbehalten – so steht es auch im
+  // Admin-Banner und beim Anlegen der Session.
+  if (!requireAdmin(req, res, stream.id)) return;
 
   db.prepare('DELETE FROM playlist_items WHERE id = ?').run(item.id);
   res.json({ ok: true });
@@ -1434,18 +1437,18 @@ app.post('/api/items/:iid/refresh', writeLimiter, async (req, res) => {
     .prepare('SELECT id, stream_id, provider, source_url FROM playlist_items WHERE id = ?')
     .get(req.params.iid);
   if (!item) {
-    return res.status(404).json({ error: 'Item nicht gefunden' });
+    return res.status(404).json({ error: 'Eintrag nicht gefunden' });
   }
   const stream = db
     .prepare('SELECT id, admin_token, password_hash FROM streams WHERE id = ?')
     .get(item.stream_id);
   if (!stream) {
-    return res.status(404).json({ error: 'Stream nicht gefunden' });
+    return res.status(404).json({ error: 'Session nicht gefunden' });
   }
   if (!checkStreamAccess(req, res, stream)) return;
 
   if (item.provider !== 'ard' || !item.source_url) {
-    return res.status(400).json({ error: 'Für dieses Item gibt es keine Quelle zum Neuauflösen' });
+    return res.status(400).json({ error: 'Für diesen Eintrag gibt es keine Quelle zum Neuauflösen' });
   }
 
   try {
@@ -1531,13 +1534,13 @@ app.post('/api/streams/:id/comments', writeLimiter, (req, res) => {
   const { parent_id, timecode_sec, item_id, author_name, author_color, body, image } = req.body || {};
 
   if (typeof author_name !== 'string' || !author_name.trim() || author_name.length > MAX_NAME_LEN) {
-    return res.status(400).json({ error: `Name fehlt oder zu lang (max ${MAX_NAME_LEN} Zeichen)` });
+    return res.status(400).json({ error: `Name fehlt oder zu lang (max. ${MAX_NAME_LEN} Zeichen)` });
   }
   // Bildkommentare dürfen ohne Text auskommen (reines Bild) – Pflicht ist nur,
   // dass mindestens eines von Text/Bild vorhanden ist.
   const hasImage = image !== undefined && image !== null && image !== '';
   if (typeof body !== 'string' || body.length > MAX_BODY_LEN || (!body.trim() && !hasImage)) {
-    return res.status(400).json({ error: `Kommentartext fehlt oder zu lang (max ${MAX_BODY_LEN} Zeichen)` });
+    return res.status(400).json({ error: `Kommentartext fehlt oder zu lang (max. ${MAX_BODY_LEN} Zeichen)` });
   }
   let imageValue = null;
   if (hasImage) {
@@ -1588,7 +1591,7 @@ app.post('/api/streams/:id/comments', writeLimiter, (req, res) => {
       .prepare('SELECT id, provider FROM playlist_items WHERE id = ? AND stream_id = ?')
       .get(itemIdValue, req.params.id);
     if (!item) {
-      return res.status(400).json({ error: 'Playlist-Item nicht gefunden' });
+      return res.status(400).json({ error: 'Playlist-Eintrag nicht gefunden' });
     }
     if (item.provider === 'instagram') {
       // Instagrams embed.js liefert keine Positions-/Ende-Rückmeldung (siehe
@@ -1669,7 +1672,7 @@ app.patch('/api/comments/:cid', writeLimiter, (req, res) => {
 
   const hasImage = !!imageValue;
   if (typeof body !== 'string' || body.length > MAX_BODY_LEN || (!body.trim() && !hasImage)) {
-    return res.status(400).json({ error: `Kommentartext fehlt oder zu lang (max ${MAX_BODY_LEN} Zeichen)` });
+    return res.status(400).json({ error: `Kommentartext fehlt oder zu lang (max. ${MAX_BODY_LEN} Zeichen)` });
   }
 
   const updatedAt = Date.now();
@@ -1727,12 +1730,12 @@ app.post('/api/comments/:cid/reactions', writeLimiter, (req, res) => {
 
   const authorName = typeof req.body?.author_name === 'string' ? req.body.author_name.trim() : '';
   if (!authorName || authorName.length > MAX_NAME_LEN) {
-    return res.status(400).json({ error: `Name fehlt oder zu lang (max ${MAX_NAME_LEN} Zeichen)` });
+    return res.status(400).json({ error: `Name fehlt oder zu lang (max. ${MAX_NAME_LEN} Zeichen)` });
   }
 
   const emoji = typeof req.body?.emoji === 'string' ? req.body.emoji : '';
   if (!REACTION_EMOJI_SET.has(emoji)) {
-    return res.status(400).json({ error: 'Ungültiges Reaction-Emoji' });
+    return res.status(400).json({ error: 'Ungültiges Reaktions-Emoji' });
   }
 
   const existing = db
@@ -1766,7 +1769,7 @@ app.post('/api/comments/:cid/read', writeLimiter, (req, res) => {
 
   const authorName = typeof req.body?.author_name === 'string' ? req.body.author_name.trim() : '';
   if (!authorName || authorName.length > MAX_NAME_LEN) {
-    return res.status(400).json({ error: `Name fehlt oder zu lang (max ${MAX_NAME_LEN} Zeichen)` });
+    return res.status(400).json({ error: `Name fehlt oder zu lang (max. ${MAX_NAME_LEN} Zeichen)` });
   }
 
   const read = req.body?.read !== false;
@@ -1792,12 +1795,12 @@ app.post('/api/comments/:cid/read', writeLimiter, (req, res) => {
 app.post('/api/streams/:id/comments/read-bulk', writeLimiter, (req, res) => {
   const stream = db.prepare('SELECT id FROM streams WHERE id = ?').get(req.params.id);
   if (!stream) {
-    return res.status(404).json({ error: 'Stream nicht gefunden' });
+    return res.status(404).json({ error: 'Session nicht gefunden' });
   }
 
   const authorName = typeof req.body?.author_name === 'string' ? req.body.author_name.trim() : '';
   if (!authorName || authorName.length > MAX_NAME_LEN) {
-    return res.status(400).json({ error: `Name fehlt oder zu lang (max ${MAX_NAME_LEN} Zeichen)` });
+    return res.status(400).json({ error: `Name fehlt oder zu lang (max. ${MAX_NAME_LEN} Zeichen)` });
   }
 
   const commentIds = Array.isArray(req.body?.comment_ids) ? req.body.comment_ids : [];
@@ -1809,7 +1812,7 @@ app.post('/api/streams/:id/comments/read-bulk', writeLimiter, (req, res) => {
     return res.json({ ok: true, count: 0 });
   }
   if (validIds.length > 1000) {
-    return res.status(400).json({ error: 'Zu viele Kommentar-IDs (max 1000)' });
+    return res.status(400).json({ error: 'Zu viele Kommentar-IDs (max. 1000)' });
   }
 
   const placeholders = validIds.map(() => '?').join(',');
@@ -1835,7 +1838,7 @@ app.post('/api/streams/:id/comments/read-bulk', writeLimiter, (req, res) => {
 app.delete('/api/streams/:id', writeLimiter, (req, res) => {
   const stream = db.prepare('SELECT id FROM streams WHERE id = ?').get(req.params.id);
   if (!stream) {
-    return res.status(404).json({ error: 'Stream nicht gefunden' });
+    return res.status(404).json({ error: 'Session nicht gefunden' });
   }
   if (!requireAdmin(req, res, req.params.id)) return;
 

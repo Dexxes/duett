@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <base href="__BASE_HREF__">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Duett – Stream-Kommentare</title>
+<title>Neue Session – Duett</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -28,6 +28,7 @@
           <h2 class="wizard-step-title">Wie soll deine Session heißen?</h2>
           <p class="wizard-step-hint">Der Titel ist für alle sichtbar, die den Link später öffnen.</p>
           <input type="text" id="title" name="title" maxlength="200" placeholder="z. B. Bandprobe 12.07." autofocus>
+          <p id="title-error" class="error hidden">Bitte gib einen Titel ein</p>
           <div class="wizard-actions">
             <span></span>
             <button type="button" class="wizard-next" data-goto="2">Weiter →</button>
@@ -48,15 +49,15 @@
 
         <div class="wizard-step" data-step="3">
           <h2 class="wizard-step-title">Noch ein paar Details</h2>
-          <p class="wizard-step-hint">Beides optional – lässt sich für das Passwort auch später über den Admin-Link ändern.</p>
+          <p class="wizard-step-hint">Beides optional – das Passwort lässt sich auch später über den Admin-Link ändern.</p>
 
           <label for="slug">Kurzlink</label>
           <input type="text" id="slug" name="slug" maxlength="40" placeholder="z. B. bandprobe-12-07 – leer lassen für zufällig">
-          <p class="field-hint">Wird Teil der Stream-URL (.../s/dein-kurzlink). Nur Kleinbuchstaben, Zahlen und Bindestriche, 3–40 Zeichen.</p>
+          <p class="field-hint">Wird Teil der Session-URL (.../s/dein-kurzlink). Nur Kleinbuchstaben, Zahlen und Bindestriche, 3–40 Zeichen.</p>
 
           <label for="session_password">Passwort für diese Session</label>
           <input type="password" id="session_password" name="session_password" maxlength="200" placeholder="Leer lassen für offenen Zugriff" autocomplete="new-password">
-          <p class="field-hint">Schützt Ansicht und Kommentare zusätzlich zum Share-Link.</p>
+          <p class="field-hint">Mindestens 4 Zeichen. Schützt Ansicht und Kommentare zusätzlich zum Share-Link.</p>
 
           <div class="wizard-actions">
             <button type="button" class="wizard-back secondary" data-goto="2">← Zurück</button>
@@ -75,7 +76,7 @@
         <button type="button" data-copy="#share-link">Kopieren</button>
       </div>
 
-      <p>Admin-Link (zum Löschen von Kommentaren/Items/Session – nicht teilen!):</p>
+      <p>Admin-Link (zum Löschen von Kommentaren, Playlist-Einträgen und der Session – nicht teilen!):</p>
       <div class="link-row">
         <input type="text" id="admin-link" readonly>
         <button type="button" data-copy="#admin-link">Kopieren</button>
@@ -83,7 +84,7 @@
 
       <p id="result-item-note" class="field-hint hidden"></p>
 
-      <a id="open-link" class="button-link" href="#">Stream öffnen →</a>
+      <a id="open-link" class="button-link" href="#">Session öffnen →</a>
       <button type="button" id="create-another-btn" class="secondary wizard-restart">Weitere Session anlegen</button>
     </section>
   </div>
