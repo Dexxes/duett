@@ -14,30 +14,12 @@
 
   // ---------- Helpers ----------
 
+  // Maskiert auch Anführungszeichen: das Ergebnis landet u. a. in
+  // Attributwerten (z. B. href in linkifyWithPlaylistRefs) – ein bloßes
+  // textContent->innerHTML würde " und ' durchlassen (XSS).
+  const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
-  // Wandelt URLs in bereits escapetem HTML-Text in klickbare Links um.
-  // Läuft NACH escapeHtml, sodass kein rohes HTML aus Nutzereingaben
-  // eingeschleust werden kann – es werden nur <a>-Tags um URL-Treffer gelegt.
-  function linkify(safeHtml) {
-    const urlRegex = /((https?:\/\/|www\.)[^\s<]+)/gi;
-    return safeHtml.replace(urlRegex, (match) => {
-      let core = match;
-      let trailing = '';
-      const trailingChars = new Set(['.', ',', ';', ':', '!', '?', ')', ']', '"', "'"]);
-      while (core.length > 0 && trailingChars.has(core[core.length - 1])) {
-        trailing = core[core.length - 1] + trailing;
-        core = core.slice(0, -1);
-      }
-      if (!core) return match;
-      let href = core;
-      if (!/^https?:\/\//i.test(href)) href = 'https://' + href;
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer nofollow ugc">${core}</a>${trailing}`;
-    });
+    return String(str ?? '').replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
   }
 
   // Zeichenlimit für Sprechblasen im Vollbild: alles darüber hinaus wird
@@ -420,7 +402,7 @@
     try {
       await apiFetch(`api/comments/${comment.id}/read`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...streamAccessHeaders(comment.stream_id) },
         body: JSON.stringify({ author_name: authorName, read }),
       });
     } catch (err) {
@@ -504,6 +486,11 @@
     let saveTimer = null;
     let lines = []; // [{ text, author_name, author_color }]
     let lastKnownText = '';
+    // true, sobald seit dem letzten Speichern tatsächlich getippt wurde. Ohne
+    // dieses Flag hätte ein bloßes Hinein- und Herausklicken den (beim
+    // Fokussieren eingefrorenen) alten Textarea-Inhalt gespeichert und damit
+    // zwischenzeitliche Änderungen anderer überschrieben.
+    let dirty = false;
 
     function linesToText(ls) {
       return ls.map((l) => l.text).join('\n');
@@ -547,6 +534,16 @@
       if (document.activeElement !== textarea) {
         textarea.value = lastKnownText;
         showView();
+      } else if (!dirty && textarea.value !== lastKnownText) {
+        // Fokussiert, aber noch nichts getippt: Stand anderer übernehmen,
+        // Cursor möglichst erhalten.
+        const { selectionStart, selectionEnd } = textarea;
+        textarea.value = lastKnownText;
+        try {
+          textarea.setSelectionRange(selectionStart, selectionEnd);
+        } catch {
+          // ignore
+        }
       }
     }
 
@@ -569,8 +566,13 @@
     }
 
     async function save() {
+      if (!dirty) return;
       const value = textarea.value;
-      if (value === lastKnownText) return;
+      if (value === lastKnownText) {
+        dirty = false;
+        return;
+      }
+      dirty = false;
       const newLines = computeNewLines(value.split('\n'));
       try {
         const data = await apiFetch(`api/streams/${streamId}/notes`, {
@@ -581,12 +583,14 @@
         lines = data.lines || newLines;
         lastKnownText = linesToText(lines);
       } catch (err) {
+        dirty = true; // beim nächsten Anlass erneut versuchen
         console.error('Notizen konnten nicht gespeichert werden:', err);
       }
     }
 
     textarea.addEventListener('focus', showEditor);
     textarea.addEventListener('input', () => {
+      dirty = true;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(save, 800);
     });
@@ -616,6 +620,19 @@
 
   function getStreamAccessToken(streamId) {
     return getStreamAccessTokens()[streamId] || null;
+  }
+
+  // Header für den Zugriff auf eine (ggf. passwortgeschützte) Session: Access-
+  // Token aus dem Passwort-Login und – falls die Seite über den Admin-Link
+  // geöffnet wurde – der Admin-Token, den der Server ebenfalls als Zugang
+  // akzeptiert (siehe checkStreamAccess in server.js).
+  function streamAccessHeaders(streamId) {
+    const headers = {};
+    const token = getStreamAccessToken(streamId);
+    if (token) headers['X-Stream-Access'] = token;
+    const adminToken = new URLSearchParams(location.search).get('admin');
+    if (adminToken) headers['X-Admin-Token'] = adminToken;
+    return headers;
   }
 
   function setStreamAccessToken(streamId, token) {
@@ -1110,11 +1127,11 @@
     });
   }
 
-  // Wie linkify(), aber Spotify-/YouTube-/TikTok-/Instagram- und Mediathek-
+  // Wandelt URLs in bereits escapetem HTML-Text in klickbare Links um.
+  // Spotify-/YouTube-/TikTok-/Instagram- und Mediathek-
   // Links (ARD/ZDF/Arte/3sat), die sich einem bereits bekannten Playlist-Item
   // zuordnen lassen, werden statt als externer Link als In-App-Sprung zum
-  // Playlist-Item gerendert. Andere URLs verhalten sich wie bei linkify()
-  // gewohnt. @-Mentions (siehe linkifyMentions) werden
+  // Playlist-Item gerendert. Andere URLs werden zu normalen externen Links. @-Mentions (siehe linkifyMentions) werden
   // zuerst aufgelöst.
   function linkifyWithPlaylistRefs(safeHtml, playlistArr) {
     const withMentions = linkifyMentions(safeHtml, playlistArr);
@@ -1437,7 +1454,12 @@
         errorEl.textContent = err.message;
         errorEl.classList.remove('hidden');
         hideMixStatus();
-        if (sourceInput) showStep(2);
+        // Zum Schritt springen, zu dem der Fehler gehört – nicht pauschal zur
+        // Quelle, wenn z. B. nur der Kurzlink vergeben ist.
+        const msg = err.message || '';
+        if (/^Titel/.test(msg)) showStep(1);
+        else if (err.status === 409 || /^(Kurzlink|Passwort)/.test(msg)) showStep(3);
+        else if (sourceInput) showStep(2);
       } finally {
         submitBtn.disabled = false;
       }
@@ -1797,8 +1819,14 @@
     function adminHeaders() {
       return adminToken ? { 'X-Admin-Token': adminToken } : {};
     }
+    // Schickt neben dem Access-Token auch den Admin-Token mit: der Server
+    // akzeptiert ihn als Zugang zu passwortgeschützten Sessions, sodass der
+    // Admin-Link nicht zusätzlich nach dem Passwort fragt.
     function accessHeaders() {
-      return accessToken ? { 'X-Stream-Access': accessToken } : {};
+      return {
+        ...(accessToken ? { 'X-Stream-Access': accessToken } : {}),
+        ...adminHeaders(),
+      };
     }
 
     const notesController = createNotesController(streamId, accessHeaders, () => ({
@@ -1961,13 +1989,36 @@
     async function loadItems() {
       try {
         const data = await apiFetch(`api/streams/${streamId}/items`, { headers: accessHeaders() });
-        const hadNoItemsYet = playlist.length === 0;
+        // currentIndex hängt am Array-Index – wird (auch von anderen
+        // Betrachtenden) ein Item VOR dem aktuellen entfernt, würde der Index
+        // sonst auf das falsche Item zeigen (Kommentare/Marker landen beim
+        // falschen Item). Deshalb über die Item-ID neu zuordnen.
+        const previousItem = playlist[currentIndex] || null;
+        const previousIndex = currentIndex;
         playlist = data;
+        let currentItemRemoved = false;
+        if (previousItem) {
+          const newIndex = playlist.findIndex((it) => it.id === previousItem.id);
+          if (newIndex !== -1) {
+            currentIndex = newIndex;
+          } else {
+            currentItemRemoved = true;
+            stopPlaybackForProvider(previousItem.provider);
+            isPlaying = false;
+            updatePlayPauseIcon();
+            currentIndex = -1;
+          }
+        } else {
+          currentIndex = -1;
+        }
         renderPlaylist();
         updatePremiumBannerVisibility();
         commentHereBtn.disabled = playlist.length === 0;
-        if (hadNoItemsYet && playlist.length > 0) {
-          loadItemIntoPlayer(0, false);
+        if (currentIndex === -1 && playlist.length > 0) {
+          // Erstes Laden bzw. aktuelles Item wurde entfernt: das Item an
+          // derselben Stelle (bzw. das letzte) laden, ohne Autoplay.
+          const fallback = currentItemRemoved ? Math.min(previousIndex, playlist.length - 1) : 0;
+          loadItemIntoPlayer(fallback, false);
         } else if (playlist.length === 0) {
           updateNowPlaying(null);
           updatePosDisplayVisibility(null);
@@ -1984,11 +2035,11 @@
 
     // ---------- Anzeige: aktueller Titel, Position, Play/Pause-Icon ----------
 
+    // Gleiches Format wie formatTime (inkl. Stunden, z. B. "1:30:00" statt
+    // "90:00"), damit Anzeige, Marker-Tooltip und Kommentar-Badges
+    // übereinstimmen.
     function formatPos(sec) {
-      sec = Math.max(0, Math.floor(sec || 0));
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
-      return `${m}:${String(s).padStart(2, '0')}`;
+      return formatTime(sec);
     }
 
     function updatePosDisplay() {
@@ -2919,7 +2970,7 @@
         row.innerHTML = `
           ${
             item.thumbnail_url
-              ? `<img class="playlist-item-thumb" src="${item.thumbnail_url}" alt="">`
+              ? '<img class="playlist-item-thumb" alt="">'
               : '<span class="playlist-item-thumb playlist-item-thumb-placeholder"></span>'
           }
           <span class="playlist-item-meta">
@@ -2933,6 +2984,10 @@
           }
           <button type="button" class="playlist-item-remove" aria-label="Entfernen" title="Entfernen">×</button>
         `;
+        // src per DOM-Property statt per HTML-String: thumbnail_url stammt bei
+        // YouTube-Items vom Client und darf kein Markup einschleusen können.
+        const thumbEl = row.querySelector('img.playlist-item-thumb');
+        if (thumbEl) thumbEl.src = item.thumbnail_url;
         row.querySelector('.playlist-item-title').textContent = item.title;
         row.querySelector('.playlist-item-artist').textContent = item.artist_or_channel || '';
         row.addEventListener('click', (e) => {
@@ -3439,7 +3494,7 @@
       try {
         const updated = await apiFetch(`api/comments/${commentId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...accessHeaders() },
           body: JSON.stringify({ body, image: image || null, author_name: authorName }),
         });
         if (comment) {
@@ -3499,7 +3554,7 @@
       try {
         const res = await apiFetch(`api/comments/${commentId}/reactions`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...accessHeaders() },
           body: JSON.stringify({ emoji, author_name: authorName }),
         });
         comment.reactions = res.reactions || comment.reactions;
@@ -3596,7 +3651,7 @@
       try {
         await apiFetch(`api/comments/${id}`, {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+          headers: { 'Content-Type': 'application/json', ...accessHeaders() },
           body: JSON.stringify({ author_name: authorName }),
         });
       } catch (err) {

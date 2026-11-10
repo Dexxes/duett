@@ -422,7 +422,11 @@ function sanitizeClientItem(raw) {
       typeof artist_or_channel === 'string' ? artist_or_channel.trim().slice(0, MAX_ITEM_ARTIST_LEN) : '',
     duration_ms: Number.isFinite(duration_ms) ? Math.max(0, Math.floor(duration_ms)) : null,
     thumbnail_url:
-      typeof thumbnail_url === 'string' ? thumbnail_url.trim().slice(0, MAX_ITEM_THUMBNAIL_LEN) : null,
+      typeof thumbnail_url === 'string' &&
+      thumbnail_url.trim().length <= MAX_ITEM_THUMBNAIL_LEN &&
+      isValidUrl(thumbnail_url.trim())
+        ? thumbnail_url.trim()
+        : null,
   };
 }
 
@@ -620,6 +624,27 @@ function getAuthorizedStream(req, res) {
   }
   if (!checkStreamAccess(req, res, stream)) return null;
   return stream;
+}
+
+// Lädt einen Kommentar und prüft dabei den Zugriffsschutz der zugehörigen
+// Session (Passwort), analog zu getAuthorizedStream. Ohne diese Prüfung
+// könnten Kommentare passwortgeschützter Sessions über ihre (fortlaufende)
+// ID ohne Passwort bearbeitet/gelöscht/gelesen werden.
+function getAuthorizedComment(req, res, columns) {
+  const comment = db.prepare(`SELECT ${columns} FROM comments WHERE id = ?`).get(req.params.cid);
+  if (!comment) {
+    res.status(404).json({ error: 'Kommentar nicht gefunden' });
+    return null;
+  }
+  const stream = db
+    .prepare('SELECT id, admin_token, password_hash FROM streams WHERE id = ?')
+    .get(comment.stream_id);
+  if (!stream) {
+    res.status(404).json({ error: 'Kommentar nicht gefunden' });
+    return null;
+  }
+  if (!checkStreamAccess(req, res, stream)) return null;
+  return comment;
 }
 
 function requireAdmin(req, res, streamId) {
@@ -1106,24 +1131,10 @@ const authLimiter = rateLimit({
 
 // ---------- API ----------
 
-// Alle Streams auflisten (chronologisch absteigend, für die Startseite).
-// Titel von passwortgeschützten Streams werden hier NICHT ausgegeben (nur
-// das Faktum, dass ein Schutz besteht) – sonst könnte man den Schutz einfach
-// umgehen, indem man sich die Inhaltsübersicht auf der Startseite ansieht.
-app.get('/api/streams', (req, res) => {
-  const rows = db
-    .prepare('SELECT id, title, created_at, password_hash, type FROM streams ORDER BY created_at DESC')
-    .all();
-  res.json(
-    rows.map((r) => ({
-      id: r.id,
-      title: r.password_hash ? null : r.title,
-      type: r.type || 'ard',
-      password_protected: !!r.password_hash,
-      created_at: r.created_at,
-    }))
-  );
-});
+// Hinweis: Eine öffentliche Liste aller Sessions (früher GET /api/streams)
+// gibt es bewusst nicht mehr – sie hätte sämtliche Session-IDs (= Share-
+// Links) ohne Passwort preisgegeben und damit die passwortgeschützte
+// Übersichtsseite (/overview, siehe unten) ausgehebelt.
 
 // ARD-Mediathek-Link zu m3u8-URL auflösen
 app.post('/api/resolve-ard', writeLimiter, async (req, res) => {
@@ -1329,8 +1340,7 @@ app.post('/api/overview/auth', authLimiter, (req, res) => {
 });
 
 // Liefert ALLE Sessions inkl. Titel (auch bei passwortgeschützten Sessions –
-// anders als /api/streams, das für die alte, öffentliche Startseiten-Liste
-// gedacht war). Nur mit gültigem Übersichts-Access-Token erreichbar.
+// anders als die frühere, öffentliche Startseiten-Liste). Nur mit gültigem Übersichts-Access-Token erreichbar.
 app.get('/api/overview/streams', (req, res) => {
   if (!OVERVIEW_PASSWORD) {
     return res.status(404).json({ error: 'Übersichtsseite ist nicht aktiviert' });
@@ -1638,10 +1648,8 @@ app.post('/api/streams/:id/comments', writeLimiter, (req, res) => {
 // (Kehrseite: kein Schutz vor Namensgleichheit/Trittbrettfahrern, siehe
 // README).
 app.patch('/api/comments/:cid', writeLimiter, (req, res) => {
-  const comment = db.prepare('SELECT * FROM comments WHERE id = ?').get(req.params.cid);
-  if (!comment) {
-    return res.status(404).json({ error: 'Kommentar nicht gefunden' });
-  }
+  const comment = getAuthorizedComment(req, res, '*');
+  if (!comment) return;
 
   const authorName = typeof req.body?.author_name === 'string' ? req.body.author_name.trim() : '';
   if (!authorName || authorName !== comment.author_name) {
@@ -1693,12 +1701,8 @@ app.patch('/api/comments/:cid', writeLimiter, (req, res) => {
 // zum Kommentar passt – siehe Kommentar bei PATCH oben zur namensbasierten
 // Identifikation statt Edit-Token)
 app.delete('/api/comments/:cid', writeLimiter, (req, res) => {
-  const comment = db
-    .prepare('SELECT id, stream_id, author_name FROM comments WHERE id = ?')
-    .get(req.params.cid);
-  if (!comment) {
-    return res.status(404).json({ error: 'Kommentar nicht gefunden' });
-  }
+  const comment = getAuthorizedComment(req, res, 'id, stream_id, author_name');
+  if (!comment) return;
 
   const authorName = typeof req.body?.author_name === 'string' ? req.body.author_name.trim() : '';
   const isOwner = !!authorName && authorName === comment.author_name;
@@ -1707,9 +1711,8 @@ app.delete('/api/comments/:cid', writeLimiter, (req, res) => {
     if (!requireAdmin(req, res, comment.stream_id)) return;
   }
 
-  // FK-Constraints sind hier nicht als ON-Konflikt-Cascade aktiv (kein PRAGMA
-  // foreign_keys), daher Reaktionen des Kommentars explizit mit aufräumen.
-  db.prepare('DELETE FROM comment_reactions WHERE comment_id = ?').run(comment.id);
+  // Antworten, Reaktionen und Gelesen-Status werden per ON DELETE CASCADE
+  // mitgelöscht (better-sqlite3 aktiviert foreign_keys standardmäßig).
   db.prepare('DELETE FROM comments WHERE id = ?').run(comment.id);
   res.json({ ok: true });
 });
@@ -1720,10 +1723,8 @@ app.delete('/api/comments/:cid', writeLimiter, (req, res) => {
 // kann pro Kommentar mehrere unterschiedliche Emojis setzen, aber pro Emoji
 // nur einmal (UNIQUE-Constraint in comment_reactions).
 app.post('/api/comments/:cid/reactions', writeLimiter, (req, res) => {
-  const comment = db.prepare('SELECT id, stream_id FROM comments WHERE id = ?').get(req.params.cid);
-  if (!comment) {
-    return res.status(404).json({ error: 'Kommentar nicht gefunden' });
-  }
+  const comment = getAuthorizedComment(req, res, 'id, stream_id');
+  if (!comment) return;
 
   const authorName = typeof req.body?.author_name === 'string' ? req.body.author_name.trim() : '';
   if (!authorName || authorName.length > MAX_NAME_LEN) {
@@ -1759,10 +1760,8 @@ app.post('/api/comments/:cid/reactions', writeLimiter, (req, res) => {
 // (Checkbox/Button "als gelesen markieren" bzw. wieder entfernen), deshalb
 // kein Toggle, sondern read=true/false im Body.
 app.post('/api/comments/:cid/read', writeLimiter, (req, res) => {
-  const comment = db.prepare('SELECT id, stream_id FROM comments WHERE id = ?').get(req.params.cid);
-  if (!comment) {
-    return res.status(404).json({ error: 'Kommentar nicht gefunden' });
-  }
+  const comment = getAuthorizedComment(req, res, 'id, stream_id');
+  if (!comment) return;
 
   const authorName = typeof req.body?.author_name === 'string' ? req.body.author_name.trim() : '';
   if (!authorName || authorName.length > MAX_NAME_LEN) {
@@ -1790,10 +1789,8 @@ app.post('/api/comments/:cid/read', writeLimiter, (req, res) => {
 // localStorage des Browsers gespeicherter Gelesen-Markierungen auf den
 // Server verwendet (siehe app.js, migrateLegacyLocalReadStatus).
 app.post('/api/streams/:id/comments/read-bulk', writeLimiter, (req, res) => {
-  const stream = db.prepare('SELECT id FROM streams WHERE id = ?').get(req.params.id);
-  if (!stream) {
-    return res.status(404).json({ error: 'Stream nicht gefunden' });
-  }
+  const stream = getAuthorizedStream(req, res);
+  if (!stream) return;
 
   const authorName = typeof req.body?.author_name === 'string' ? req.body.author_name.trim() : '';
   if (!authorName || authorName.length > MAX_NAME_LEN) {
@@ -1839,8 +1836,8 @@ app.delete('/api/streams/:id', writeLimiter, (req, res) => {
   }
   if (!requireAdmin(req, res, req.params.id)) return;
 
-  db.prepare('DELETE FROM comments WHERE stream_id = ?').run(req.params.id);
-  db.prepare('DELETE FROM playlist_items WHERE stream_id = ?').run(req.params.id);
+  // Kommentare (inkl. Antworten/Reaktionen/Gelesen-Status) und Playlist-
+  // Items hängen per ON DELETE CASCADE an der Session.
   db.prepare('DELETE FROM streams WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -1850,7 +1847,7 @@ app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Nicht gefunden' });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3003;
 app.listen(PORT, () => {
   console.log(`Duett läuft auf http://localhost:${PORT} (BASE_PATH="${BASE_PATH}")`);
 });
