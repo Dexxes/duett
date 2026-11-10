@@ -1215,6 +1215,18 @@
     textarea.setSelectionRange(newPos, newPos);
   }
 
+  // Browser können das native Emoji-Panel des Betriebssystems (Windows:
+  // Win + . / macOS: Ctrl + Cmd + Leertaste) nicht per Script öffnen. Der
+  // Button behält deshalb den Fokus in der Textarea – so landet ein per
+  // Tastenkürzel geöffnetes System-Panel direkt dort – und das Flyout zeigt
+  // neben der Schnellauswahl einen Hinweis auf das passende Kürzel.
+  const NATIVE_EMOJI_SHORTCUT = (() => {
+    const platform = navigator.userAgentData?.platform || navigator.platform || '';
+    if (/win/i.test(platform)) return 'Win + .';
+    if (/mac/i.test(platform) && navigator.maxTouchPoints <= 1) return 'Ctrl + Cmd + Leertaste';
+    return null;
+  })();
+
   function closeAllEmojiFlyouts() {
     document.querySelectorAll('.emoji-flyout:not(.hidden)').forEach((flyout) => {
       flyout.classList.add('hidden');
@@ -1258,6 +1270,10 @@
     btn.setAttribute('aria-haspopup', 'true');
     btn.setAttribute('aria-expanded', 'false');
     btn.textContent = '😀';
+    if (NATIVE_EMOJI_SHORTCUT) btn.title = `Emoji einfügen (alle Emojis: ${NATIVE_EMOJI_SHORTCUT})`;
+    // Mousedown soll den Fokus nicht aus der Textarea ziehen, damit
+    // Cursorposition und ein offenes System-Panel erhalten bleiben.
+    btn.addEventListener('mousedown', (e) => e.preventDefault());
     const flyout = document.createElement('div');
     flyout.className = 'emoji-flyout hidden';
     flyout.setAttribute('role', 'menu');
@@ -1268,6 +1284,7 @@
       opt.className = 'emoji-flyout-option';
       opt.textContent = emoji;
       opt.setAttribute('role', 'menuitem');
+      opt.addEventListener('mousedown', (e) => e.preventDefault());
       opt.addEventListener('click', () => {
         insertAtCursor(textarea, emoji);
         closeAllEmojiFlyouts();
@@ -1275,12 +1292,22 @@
       });
       flyout.appendChild(opt);
     });
+    if (NATIVE_EMOJI_SHORTCUT) {
+      const hint = document.createElement('p');
+      hint.className = 'emoji-flyout-hint';
+      hint.append('Alle Emojis: ');
+      const kbd = document.createElement('kbd');
+      kbd.textContent = NATIVE_EMOJI_SHORTCUT;
+      hint.appendChild(kbd);
+      flyout.appendChild(hint);
+    }
     btn.addEventListener('click', () => {
       const willOpen = flyout.classList.contains('hidden');
       closeAllEmojiFlyouts();
       if (willOpen) {
         flyout.classList.remove('hidden');
         btn.setAttribute('aria-expanded', 'true');
+        textarea.focus();
       }
     });
     wrap.appendChild(btn);
