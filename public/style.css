@@ -2496,13 +2496,14 @@ button[data-testid="play-pause-button"] {
   }
 }
 /* ========================================================= */
-/* Vollbild ARD/Video: schwebende Glass-Steuerleiste          */
+/* Vollbild ARD/Video + YouTube: schwebende Glass-Steuerleiste */
 /* ========================================================= */
 /* .fs-overlay setzt app.js (updateFsOverlay) auf .player-wrap, solange der
-   Player im Vollbild ist UND ein ARD/Video-Item läuft. Eine Klasse statt
-   :fullscreen-Pseudoklassen erspart die dreifachen Vendor-Regeln und lässt
-   iframe-Provider (Spotify/YouTube/TikTok) bewusst außen vor – deren eigene
-   Bedienelemente würden sonst von der Leiste verdeckt.
+   Player im Vollbild ist UND ein ARD/Video- oder YouTube-Item läuft. Eine
+   Klasse statt :fullscreen-Pseudoklassen erspart die dreifachen
+   Vendor-Regeln und lässt die übrigen iframe-Provider (Spotify/TikTok/
+   Instagram) bewusst außen vor – deren eigene Bedienelemente würden sonst
+   von der Leiste verdeckt.
    .fs-controls-hidden kommt dazu, wenn die Leiste nach Inaktivität
    ausgeblendet ist. --fs-controls-h (Höhe der Leiste) misst app.js, damit
    die Sprechblasen oberhalb der Leiste bleiben. */
@@ -2527,9 +2528,28 @@ button[data-testid="play-pause-button"] {
   min-height: 0;
 }
 
-.player-wrap.fs-overlay #ard-embed {
+.player-wrap.fs-overlay #ard-embed,
+.player-wrap.fs-overlay #youtube-embed {
   height: 100%;
   margin: 0;
+}
+
+.player-wrap.fs-overlay #youtube-embed {
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+/* YouTube: transparente Fläche über dem iframe, siehe #fs-shield in
+   session.html und app.js. Liegt unter Sprechblasen (10) und Leiste (15). */
+.fs-shield {
+  display: none;
+}
+
+.player-wrap.fs-overlay[data-provider="youtube"] .fs-shield {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 5;
 }
 
 .player-wrap.fs-overlay video {
@@ -2543,8 +2563,13 @@ button[data-testid="play-pause-button"] {
   cursor: none;
 }
 
-/* Kopfbereich: bei ARD bleibt nur die Geschwindigkeitsauswahl, die oben
-   rechts schwebt. */
+/* Kopfbereich: nur die Geschwindigkeitsauswahl schwebt oben rechts; Cover
+   und Titel entfallen (ARD zeigt sie nicht, YouTube hat einen eigenen Titel). */
+.player-wrap.fs-overlay .mix-now-playing .now-playing-thumb,
+.player-wrap.fs-overlay .mix-now-playing .now-playing-meta {
+  display: none;
+}
+
 .player-wrap.fs-overlay .mix-now-playing {
   position: absolute;
   top: 16px;
