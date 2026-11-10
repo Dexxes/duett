@@ -2754,7 +2754,7 @@ button[data-testid="play-pause-button"] {
 .player-wrap.fs-overlay [data-seek="5"] { order: 7; }
 .player-wrap.fs-overlay [data-seek="30"] { order: 8; }
 .player-wrap.fs-overlay #next-item-btn { order: 9; }
-.player-wrap.fs-overlay #next-comment-btn { order: 10; margin-left: 10px; flex: 0 1 auto; }
+.player-wrap.fs-overlay #next-comment-btn { order: 10; margin-left: 10px; flex: 0 1 auto; height:41px}
 .player-wrap.fs-overlay .fullscreen-comment-bar { order: 11; }
 .player-wrap.fs-overlay .mix-pos-display { order: 12; }
 
