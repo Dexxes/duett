@@ -2,6 +2,7 @@
   "name": "duett",
   "version": "1.0.0",
   "description": "Stream-Kommentar-Webinterface: VOD-Stream mit Timecode-Kommentaren per Share-Link",
+  "license": "AGPL-3.0-or-later",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
