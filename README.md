@@ -300,7 +300,7 @@ Duett/
 
 ## Lizenz
 
-Copyright (C) 2026 Dexxes
+Copyright (C) 2026 Julian von Bülow
 
 Duett ist freie Software: Sie können es unter den Bedingungen der
 [GNU Affero General Public License](LICENSE), wie von der Free Software
