@@ -78,16 +78,27 @@
     return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
   }
 
-  // Erlaubt Eingaben wie "90", "1:30" oder "1:02:05" als Sekunden.
+  // Wie formatTime, aber mit Zehntelsekunde (falls vorhanden) – für das
+  // Zeitpunkt-Feld im Kommentarformular, das dasselbe Format wie das
+  // Sprung-Feld annimmt (siehe parseTimecode).
+  function formatTimecodeInput(sec) {
+    sec = Math.max(0, sec || 0);
+    const tenths = Math.floor((sec - Math.floor(sec)) * 10);
+    return formatTime(sec) + (tenths ? `.${tenths}` : '');
+  }
+
+  // Erlaubt Eingaben wie "90", "1:30", "1:30.5" oder "1:02:05" als Sekunden.
   function parseTimecode(str) {
     str = (str || '').trim();
     if (!str) return null;
     if (/^\d+(\.\d+)?$/.test(str)) return parseFloat(str);
     const parts = str.split(':');
-    if (parts.length < 2 || parts.some((p) => !/^\d+$/.test(p))) return null;
+    if (parts.length < 2 || parts.length > 3) return null;
+    const last = parts.pop();
+    if (parts.some((p) => !/^\d+$/.test(p)) || !/^\d+(\.\d+)?$/.test(last)) return null;
     let seconds = 0;
     for (const p of parts) seconds = seconds * 60 + parseInt(p, 10);
-    return seconds;
+    return seconds * 60 + parseFloat(last);
   }
 
   // Strg+Enter (bzw. Cmd+Enter auf dem Mac) sendet ein Formular ab, ohne
@@ -327,7 +338,10 @@
     for (let i = 0; i < name.length; i++) {
       hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
     }
-    const hue = hash % 360;
+    // Blautöne (ca. 190°–260°) aussparen – wie bei AUTHOR_COLOR_PALETTE,
+    // da --accent bereits blau ist.
+    let hue = hash % 290;
+    if (hue >= 190) hue += 70;
     return `hsl(${hue}, 62%, 58%)`;
   }
 
@@ -452,6 +466,7 @@
           await setCommentRead(comment, !isCommentRead(comment, authorName), authorName);
         } catch (err) {
           console.error('Gelesen-Status konnte nicht gespeichert werden:', err);
+          alert('Gelesen-Status konnte nicht gespeichert werden: ' + err.message);
         }
         btn.disabled = false;
         refresh();
@@ -582,6 +597,7 @@
         lastKnownText = linesToText(lines);
       } catch (err) {
         console.error('Notizen konnten nicht gespeichert werden:', err);
+        alert('Notizen konnten nicht gespeichert werden: ' + err.message);
       }
     }
 
@@ -674,6 +690,25 @@
   function spotifyOpenUrl(item) {
     const m = /^spotify:track:([a-zA-Z0-9]+)$/.exec(item?.provider_uri || '');
     return m ? `https://open.spotify.com/track/${m[1]}` : 'https://open.spotify.com/';
+  }
+
+  // Link zum Original eines Playlist-Eintrags (für das Anbieter-Icon in der
+  // Playlist), oder null, wenn keiner bekannt ist (z. B. TikTok, roher
+  // m3u8-Link ohne Mediathek-Seite).
+  function itemOpenLink(item) {
+    if (!item) return null;
+    if (item.provider === 'spotify') return { url: spotifyOpenUrl(item), label: 'In Spotify öffnen' };
+    if (item.provider === 'youtube' && /^[a-zA-Z0-9_-]{11}$/.test(item.provider_uri || '')) {
+      return { url: `https://www.youtube.com/watch?v=${item.provider_uri}`, label: 'Auf YouTube öffnen' };
+    }
+    if (item.provider === 'instagram') {
+      const m = /^(reel|p):([A-Za-z0-9_-]+)$/.exec(item.provider_uri || '');
+      if (m) return { url: `https://www.instagram.com/${m[1]}/${m[2]}/`, label: 'Auf Instagram öffnen' };
+    }
+    if (item.provider === 'ard' && /^https?:\/\//i.test(item.source_url || '')) {
+      return { url: item.source_url, label: 'In der Mediathek öffnen' };
+    }
+    return null;
   }
 
   function isYouTubeInput(input) {
@@ -896,7 +931,7 @@
         'Dieser Link ist eine YouTube-Playlist. Alle Videos der Playlist zur Session hinzufügen?'
       );
       if (!wantsPlaylist) {
-        throw new Error('Playlist-Import abgebrochen.');
+        throw new Error('Playlist-Import abgebrochen');
       }
       videoIds = await resolvePlaylistVideoIds(parsed.id);
     } else if (parsed.playlistId) {
@@ -1142,12 +1177,106 @@
     });
   }
 
+  // ---------- Emoji-Button + Flyout für Kommentar-/Antwort-/Edit-Felder ----------
+  //
+  // Jede Textarea bekommt ihren eigenen Button samt Flyout (in einem
+  // .comment-body-wrap, an dem beide absolut positioniert sind), damit
+  // Kommentar-, Antwort- und Bearbeiten-Formular gleich bedienbar sind.
+
+  const EMOJI_LIST = [
+    '😀', '😂', '🥲', '😅', '😊', '😍', '🤔', '😮',
+    '😢', '😭', '😡', '🥳', '😴', '🙄', '😱', '🤯',
+    '👍', '👎', '👏', '🙌', '🙏', '💪', '👀', '✌️',
+    '❤️', '🔥', '✨', '🎉', '💯', '⭐', '✅', '❌',
+  ];
+
+  function insertAtCursor(textarea, text) {
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? textarea.value.length;
+    textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
+    const newPos = start + text.length;
+    textarea.setSelectionRange(newPos, newPos);
+  }
+
+  function closeAllEmojiFlyouts() {
+    document.querySelectorAll('.emoji-flyout:not(.hidden)').forEach((flyout) => {
+      flyout.classList.add('hidden');
+      flyout.parentElement?.querySelector('.emoji-btn')?.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  let emojiGlobalListenersAdded = false;
+  function ensureEmojiGlobalListeners() {
+    if (emojiGlobalListenersAdded) return;
+    emojiGlobalListenersAdded = true;
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('.emoji-flyout:not(.hidden)').forEach((flyout) => {
+        const wrap = flyout.parentElement;
+        if (wrap && wrap.contains(e.target) && (e.target.closest('.emoji-btn') || flyout.contains(e.target))) return;
+        flyout.classList.add('hidden');
+        wrap?.querySelector('.emoji-btn')?.setAttribute('aria-expanded', 'false');
+      });
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeAllEmojiFlyouts();
+    });
+  }
+
+  // Legt die Textarea (falls nötig) in einen .comment-body-wrap und hängt
+  // Emoji-Button + Flyout daneben.
+  function wireEmojiPicker(textarea) {
+    if (!textarea) return;
+    ensureEmojiGlobalListeners();
+    let wrap = textarea.parentElement;
+    if (!wrap || !wrap.classList.contains('comment-body-wrap')) {
+      wrap = document.createElement('div');
+      wrap.className = 'comment-body-wrap';
+      textarea.replaceWith(wrap);
+      wrap.appendChild(textarea);
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emoji-btn';
+    btn.setAttribute('aria-label', 'Emoji einfügen');
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.textContent = '😀';
+    const flyout = document.createElement('div');
+    flyout.className = 'emoji-flyout hidden';
+    flyout.setAttribute('role', 'menu');
+    flyout.setAttribute('aria-label', 'Emoji-Auswahl');
+    EMOJI_LIST.forEach((emoji) => {
+      const opt = document.createElement('button');
+      opt.type = 'button';
+      opt.className = 'emoji-flyout-option';
+      opt.textContent = emoji;
+      opt.setAttribute('role', 'menuitem');
+      opt.addEventListener('click', () => {
+        insertAtCursor(textarea, emoji);
+        closeAllEmojiFlyouts();
+        textarea.focus();
+      });
+      flyout.appendChild(opt);
+    });
+    btn.addEventListener('click', () => {
+      const willOpen = flyout.classList.contains('hidden');
+      closeAllEmojiFlyouts();
+      if (willOpen) {
+        flyout.classList.remove('hidden');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+    wrap.appendChild(btn);
+    wrap.appendChild(flyout);
+  }
+
   // ---------- @-Mentions: Autocomplete-Dropdown beim Tippen ----------
   //
   // Ein einziges, wiederverwendetes Dropdown-Element reicht aus, da immer
   // höchstens eine Kommentar-Textarea gleichzeitig fokussiert sein kann
   // (Haupt-, Vollbild-, Antwort- und Bearbeiten-Formular teilen sich dieses
   // eine Element, siehe wireMentionAutocomplete-Aufrufe weiter unten).
+
   let mentionDropdownEl = null;
   let mentionDropdownState = null; // { textarea, atIndex, items, activeIndex }
   let mentionScrollListenerAdded = false;
@@ -1333,6 +1462,8 @@
     const createAnotherBtn = document.getElementById('create-another-btn');
     const resultItemNote = document.getElementById('result-item-note');
     const submitBtn = document.getElementById('create-submit-btn');
+    const titleError = document.getElementById('title-error');
+    titleInput.addEventListener('input', () => titleError?.classList.add('hidden'));
 
     let currentStep = 1;
 
@@ -1351,9 +1482,11 @@
     document.querySelectorAll('.wizard-next').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (currentStep === 1 && !titleInput.value.trim()) {
+          titleError?.classList.remove('hidden');
           titleInput.focus();
           return;
         }
+        titleError?.classList.add('hidden');
         showStep(Number(btn.dataset.goto));
       });
     });
@@ -1458,7 +1591,7 @@
         navigator.clipboard?.writeText(target.value).catch(() => {});
         document.execCommand?.('copy');
         const original = btn.textContent;
-        btn.textContent = 'Kopiert!';
+        btn.textContent = 'Kopiert ✓';
         setTimeout(() => (btn.textContent = original), 1500);
       });
     });
@@ -1553,8 +1686,6 @@
     const commentImageAttachHost = document.getElementById('comment-image-attach');
     const commentImageAttach = buildImageAttach(null);
     commentImageAttachHost?.appendChild(commentImageAttach.element);
-    const emojiBtn = document.getElementById('emoji-btn');
-    const emojiFlyout = document.getElementById('emoji-flyout');
     wirePasteImage(commentBodyInput, commentImageAttach);
     wireMentionAutocomplete(commentBodyInput, () => playlist);
     const commentList = document.getElementById('comment-list');
@@ -1570,6 +1701,7 @@
     const nameModalForm = document.getElementById('name-modal-form');
     const nameModalInput = document.getElementById('name-modal-input');
     const nameModalSkip = document.getElementById('name-modal-skip');
+    const nameModalError = document.getElementById('name-modal-error');
     const colorSwatchesEl = document.getElementById('color-swatches');
     const adminPasswordCard = document.getElementById('admin-password-card');
     const adminPasswordStatus = document.getElementById('admin-password-status');
@@ -1641,9 +1773,10 @@
 
     // ---------- Playlist-Sortierung nach Hinzufüge-Datum ----------
     //
-    // Regelt nur die Anzeige-Reihenfolge der Playlist-Leiste ("neueste" bzw.
-    // "älteste zuerst", Standard: neueste). Wiedergabereihenfolge und
-    // currentIndex (Vor/Zurück) bleiben an der Playlist-Position.
+    // Regelt die Reihenfolge der Playlist-Leiste ("neueste" bzw. "älteste
+    // zuerst", Standard: neueste) – und damit auch die Wiedergabe-
+    // reihenfolge: Start, Vor/Zurück und automatisches Weiterspielen folgen
+    // immer der angezeigten Sortierung (siehe playlistDisplayOrder).
 
     let playlistSortOrder = localStorage.getItem(PLAYLIST_SORT_KEY) === 'asc' ? 'asc' : 'desc';
 
@@ -1660,6 +1793,7 @@
       localStorage.setItem(PLAYLIST_SORT_KEY, playlistSortOrder);
       updatePlaylistSortUI();
       renderPlaylist();
+      renderComments();
     }
 
     if (playlistSortToggle) {
@@ -1712,6 +1846,7 @@
 
     function openNameModal() {
       nameModalInput.value = authorName;
+      nameModalError?.classList.add('hidden');
       modalColorChoice = authorColorChoice;
       colorTouched = false;
       renderColorSwatches(colorSwatchesEl, modalColorChoice, onColorSwatchSelect);
@@ -1755,9 +1890,11 @@
     async function submitNameModal() {
       const value = nameModalInput.value.trim();
       if (!value) {
+        nameModalError?.classList.remove('hidden');
         nameModalInput.focus();
         return;
       }
+      nameModalError?.classList.add('hidden');
       const submitBtn = nameModalForm.querySelector('button[type="submit"]');
       if (submitBtn) submitBtn.disabled = true;
       try {
@@ -1967,7 +2104,7 @@
         updatePremiumBannerVisibility();
         commentHereBtn.disabled = playlist.length === 0;
         if (hadNoItemsYet && playlist.length > 0) {
-          loadItemIntoPlayer(0, false);
+          loadItemIntoPlayer(playlistDisplayOrder()[0], false);
         } else if (playlist.length === 0) {
           updateNowPlaying(null);
           updatePosDisplayVisibility(null);
@@ -1984,15 +2121,8 @@
 
     // ---------- Anzeige: aktueller Titel, Position, Play/Pause-Icon ----------
 
-    function formatPos(sec) {
-      sec = Math.max(0, Math.floor(sec || 0));
-      const m = Math.floor(sec / 60);
-      const s = sec % 60;
-      return `${m}:${String(s).padStart(2, '0')}`;
-    }
-
     function updatePosDisplay() {
-      posDisplay.textContent = `${formatPos(currentPositionSec)} / ${formatPos(currentDurationSec)}`;
+      posDisplay.textContent = `${formatTime(currentPositionSec)} / ${formatTime(currentDurationSec)}`;
       if (currentDurationSec && isFinite(currentDurationSec) && currentDurationSec > 0) {
         const pct = (currentPositionSec / currentDurationSec) * 100;
         markerBar.style.setProperty('--playhead', pct + '%');
@@ -2060,6 +2190,10 @@
       const supportsTimeline = !!item && item.provider !== 'instagram';
       markerBar.classList.toggle('hidden', !supportsTimeline);
       jumpToEl?.classList.toggle('hidden', !supportsTimeline);
+      // Mobil-only-Controls (Scrubber, "Von Anfang") genauso behandeln wie
+      // ihre Desktop-Gegenstücke – bei Instagram gibt es keine Zeitleiste.
+      mobileScrubber?.classList.toggle('hidden', !supportsTimeline);
+      restartBtn?.classList.toggle('hidden', !supportsTimeline);
       nextCommentBtn?.classList.toggle('hidden', !supportsTimeline);
       // Fullscreen-Button ausblenden, wenn weder die Fullscreen API für
       // .player-wrap noch (bei ARD/Video) der iOS-Safari-Fallback über
@@ -2110,7 +2244,7 @@
       nowPlayingEl?.classList.toggle('hidden', isSpotify);
       if (isSpotify) return;
 
-      nowPlayingTitle.textContent = item ? item.title : 'Noch keine Playlist-Einträge';
+      nowPlayingTitle.textContent = item ? item.title : 'Noch keine Playlist-Elemente';
       nowPlayingArtist.textContent = item ? item.artist_or_channel || '' : '';
       if (item && item.thumbnail_url) {
         nowPlayingThumb.src = item.thumbnail_url;
@@ -2171,7 +2305,7 @@
     const refreshedItemIds = new Set();
 
     function showArdLoadError() {
-      loadErrorEl.textContent = 'Fehler beim Laden des Videos. Prüfe die m3u8-URL und CORS-Header des Hosts.';
+      loadErrorEl.textContent = 'Das Video konnte nicht geladen werden. Der Link ist evtl. abgelaufen oder wird vom Anbieter blockiert';
       loadErrorEl.classList.remove('hidden');
     }
 
@@ -2230,7 +2364,7 @@
           { once: true }
         );
       } else {
-        loadErrorEl.textContent = 'HLS wird von diesem Browser nicht unterstützt.';
+        loadErrorEl.textContent = 'Dieses Videoformat (HLS) wird von deinem Browser nicht unterstützt';
         loadErrorEl.classList.remove('hidden');
       }
     }
@@ -2577,8 +2711,9 @@
     }
 
     function handleItemEnded() {
-      if (currentIndex + 1 < playlist.length) {
-        loadItemIntoPlayer(currentIndex + 1, true);
+      const nextIndex = neighborIndex(1);
+      if (nextIndex !== -1) {
+        loadItemIntoPlayer(nextIndex, true);
       } else {
         isPlaying = false;
         updatePlayPauseIcon();
@@ -2693,10 +2828,12 @@
     });
 
     prevItemBtn.addEventListener('click', () => {
-      if (currentIndex > 0) loadItemIntoPlayer(currentIndex - 1, true);
+      const prev = neighborIndex(-1);
+      if (prev !== -1) loadItemIntoPlayer(prev, true);
     });
     nextItemBtn.addEventListener('click', () => {
-      if (currentIndex + 1 < playlist.length) loadItemIntoPlayer(currentIndex + 1, true);
+      const next = neighborIndex(1);
+      if (next !== -1) loadItemIntoPlayer(next, true);
     });
 
     // ---------- Vollbild-/Theater-Modus ----------
@@ -2815,7 +2952,7 @@
       bubble.innerHTML = `
         <span class="comment-bubble-author" style="color: ${color}"></span>
         <span class="comment-bubble-body"></span>
-        <button type="button" class="link-btn comment-bubble-reply-btn">Antworten</button>
+        <button type="button" class="link-btn comment-bubble-reply-btn">antworten</button>
       `;
       bubble.querySelector('.comment-bubble-author').textContent = c.author_name;
       bubble.querySelector('.comment-bubble-body').innerHTML = linkifyWithPlaylistRefs(
@@ -2851,6 +2988,7 @@
 
     function renderMarkers() {
       markerBar.innerHTML = '';
+      mobileScrubber?.querySelectorAll('.scrubber-marker').forEach((m) => m.remove());
       const currentItem = playlist[currentIndex];
       if (!currentItem || currentItem.provider === 'instagram') return;
       const duration = currentDurationSec;
@@ -2867,12 +3005,52 @@
           marker.title = `${formatTime(c.timecode_sec)} – ${c.author_name}: ${c.body}`;
           marker.addEventListener('click', () => seekCurrentTo(c.timecode_sec));
           markerBar.appendChild(marker);
+          // Mobil ist die Marker-Leiste ausgeblendet (dort ersetzt der
+          // Scrubber sie) – die Kommentar-Positionen erscheinen dann als
+          // Punkte direkt auf dem Scrubber.
+          if (mobileScrubber) {
+            const dot = document.createElement('span');
+            dot.className = 'scrubber-marker';
+            dot.style.left = (c.timecode_sec / duration) * 100 + '%';
+            dot.style.background = resolveAuthorColor(c);
+            mobileScrubber.insertBefore(dot, mobileScrubberThumb || null);
+          }
         });
     }
 
     // ---------- Playlist rendern ----------
 
+    // Playlist-Indizes in der angezeigten Reihenfolge (siehe
+    // playlistSortOrder). Wiedergabe-Navigation (Start, Vor/Zurück,
+    // automatisches Weiterspielen) folgt genau dieser Reihenfolge, damit
+    // "Nächstes" immer der Eintrag unter dem aktuellen in der Liste ist.
+    function playlistDisplayOrder() {
+      const dir = playlistSortOrder === 'asc' ? 1 : -1;
+      return playlist
+        .map((item, index) => index)
+        .sort((a, b) => {
+          const diff = (playlist[a].added_at || 0) - (playlist[b].added_at || 0);
+          return dir * (diff || a - b);
+        });
+    }
+
+    // Playlist-Index des Nachbarn (delta = -1 / +1) des aktuellen Eintrags
+    // in der angezeigten Reihenfolge, oder -1, wenn es keinen gibt.
+    function neighborIndex(delta) {
+      const order = playlistDisplayOrder();
+      const pos = order.indexOf(currentIndex);
+      if (pos === -1) return -1;
+      const next = order[pos + delta];
+      return next === undefined ? -1 : next;
+    }
+
+    function updatePrevNextDisabled() {
+      prevItemBtn.disabled = neighborIndex(-1) === -1;
+      nextItemBtn.disabled = neighborIndex(1) === -1;
+    }
+
     function highlightCurrentPlaylistItem() {
+      updatePrevNextDisabled();
       playlistListEl.querySelectorAll('.playlist-item').forEach((el) => {
         el.classList.toggle('active', Number(el.dataset.index) === currentIndex);
       });
@@ -2881,11 +3059,10 @@
     function highlightActiveItemComments() {
       const currentItem = playlist[currentIndex];
       const activeItemId = currentItem ? currentItem.id : null;
-      // Die Umrandung soll erst ab drei Playlist-Items greifen – bei ein oder
-      // zwei Items ist ohnehin klar, welche Kommentare zum aktiven Item
-      // gehören (bzw. gibt es noch keine wirkliche Gruppierung), da wirkt der
-      // Rahmen nur wie unnötiges Rauschen.
-      const enoughItems = playlist.length >= 3;
+      // Hervorhebung ab zwei Einträgen – dieselbe Schwelle wie für die
+      // Gruppenüberschriften (siehe renderComments). Bei nur einem Eintrag
+      // gehören ohnehin alle Kommentare zum aktiven Eintrag.
+      const enoughItems = playlist.length >= 2;
       commentList.querySelectorAll('.comment[data-id]').forEach((el) => {
         const c = comments.find((cm) => String(cm.id) === el.dataset.id);
         const isActive = enoughItems && activeItemId != null && !!c && c.item_id === activeItemId;
@@ -2894,9 +3071,10 @@
     }
 
     function renderPlaylist() {
+      updatePrevNextDisabled();
       playlistListEl.innerHTML = '';
       if (playlist.length === 0) {
-        playlistListEl.innerHTML = '<p class="empty-state">Noch keine Playlist-Einträge – füge oben eine Quelle hinzu.</p>';
+        playlistListEl.innerHTML = '<p class="empty-state">Noch keine Playlist-Elemente – füge oben eine Quelle hinzu.</p>';
         return;
       }
       // Nach Hinzufüge-Datum sortieren (playlistSortOrder, Standard: neueste
@@ -2904,13 +3082,7 @@
       // Playlist-Position als Tiebreaker. currentIndex/Wiedergabereihenfolge
       // bleiben davon unberührt, da row.dataset.index weiterhin den echten
       // Array-Index trägt.
-      const dir = playlistSortOrder === 'asc' ? 1 : -1;
-      const order = playlist
-        .map((item, index) => index)
-        .sort((a, b) => {
-          const diff = (playlist[a].added_at || 0) - (playlist[b].added_at || 0);
-          return dir * (diff || a - b);
-        });
+      const order = playlistDisplayOrder();
       for (const index of order) {
         const item = playlist[index];
         const row = document.createElement('div');
@@ -2926,13 +3098,27 @@
             <span class="playlist-item-title"></span>
             <span class="playlist-item-artist"></span>
           </span>
-          ${
-            item.provider === 'spotify'
-              ? `<a class="playlist-item-provider playlist-item-provider-link" href="${spotifyOpenUrl(item)}" target="_blank" rel="noopener noreferrer" title="In Spotify öffnen" aria-label="In Spotify öffnen">${playlistItemIcon(item.provider)}</a>`
-              : `<span class="playlist-item-provider">${playlistItemIcon(item.provider)}</span>`
-          }
-          <button type="button" class="playlist-item-remove" aria-label="Entfernen" title="Entfernen">×</button>
+          <span class="playlist-item-provider"></span>
+          <button type="button" class="playlist-item-remove" aria-label="Aus der Playlist entfernen" title="Aus der Playlist entfernen">×</button>
         `;
+        // Anbieter-Icon: verlinkt auf das Original, sofern eine Quell-URL
+        // bekannt ist (per DOM-Property statt HTML-String gesetzt, da
+        // source_url aus Nutzereingaben stammt).
+        const providerSlot = row.querySelector('.playlist-item-provider');
+        const openLink = itemOpenLink(item);
+        if (openLink) {
+          const a = document.createElement('a');
+          a.className = 'playlist-item-provider playlist-item-provider-link';
+          a.href = openLink.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.title = openLink.label;
+          a.setAttribute('aria-label', openLink.label);
+          a.textContent = playlistItemIcon(item.provider);
+          providerSlot.replaceWith(a);
+        } else {
+          providerSlot.textContent = playlistItemIcon(item.provider);
+        }
         row.querySelector('.playlist-item-title').textContent = item.title;
         row.querySelector('.playlist-item-artist').textContent = item.artist_or_channel || '';
         row.addEventListener('click', (e) => {
@@ -2941,7 +3127,7 @@
         });
         row.querySelector('.playlist-item-remove')?.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm('Dieses Item aus der Playlist entfernen?')) return;
+          if (!confirm('Dieses Element aus der Playlist entfernen?')) return;
           try {
             await apiFetch(`api/items/${item.id}`, { method: 'DELETE', headers: accessHeaders() });
             await loadItems();
@@ -3127,7 +3313,7 @@
       }
       const item = playlist[currentIndex];
       if (!item) {
-        commentErrorEl.textContent = 'Bitte zuerst eine Quelle zur Playlist hinzufügen.';
+        commentErrorEl.textContent = 'Bitte zuerst eine Quelle zur Playlist hinzufügen';
         commentErrorEl.classList.remove('hidden');
         return;
       }
@@ -3135,49 +3321,12 @@
       const isInstagram = item.provider === 'instagram';
       commentTimecodeField.classList.toggle('hidden', isInstagram);
       commentTimecodeInput.required = !isInstagram;
-      commentTimecodeInput.value = isInstagram ? '' : currentPositionSec.toFixed(1);
+      commentTimecodeInput.value = isInstagram ? '' : formatTimecodeInput(currentPositionSec);
       commentForm.classList.remove('hidden');
       commentBodyInput.focus();
     });
 
     submitOnCtrlEnter(commentBodyInput, commentForm);
-
-    // ---------- Emoji-Button + Flyout im Kommentarfeld ----------
-
-    const EMOJI_LIST = [
-      '😀', '😂', '🥲', '😅', '😊', '😍', '🤔', '😮',
-      '😢', '😭', '😡', '🥳', '😴', '🙄', '😱', '🤯',
-      '👍', '👎', '👏', '🙌', '🙏', '💪', '👀', '✌️',
-      '❤️', '🔥', '✨', '🎉', '💯', '⭐', '✅', '❌',
-    ];
-
-    let emojiFlyoutBuilt = false;
-
-    function buildEmojiFlyout() {
-      if (emojiFlyoutBuilt || !emojiFlyout) return;
-      emojiFlyoutBuilt = true;
-      EMOJI_LIST.forEach((emoji) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'emoji-flyout-option';
-        btn.textContent = emoji;
-        btn.setAttribute('role', 'menuitem');
-        btn.addEventListener('click', () => {
-          insertAtCursor(commentBodyInput, emoji);
-          closeEmojiFlyout();
-          commentBodyInput.focus();
-        });
-        emojiFlyout.appendChild(btn);
-      });
-    }
-
-    function insertAtCursor(textarea, text) {
-      const start = textarea.selectionStart ?? textarea.value.length;
-      const end = textarea.selectionEnd ?? textarea.value.length;
-      textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
-      const newPos = start + text.length;
-      textarea.setSelectionRange(newPos, newPos);
-    }
 
     // Klappt ein rechts-verankertes Popover (Emoji-Flyout, Reaction-Picker)
     // nach links um, falls es sonst über den rechten Viewport-Rand
@@ -3193,28 +3342,7 @@
       }
     }
 
-    function openEmojiFlyout() {
-      buildEmojiFlyout();
-      emojiFlyout.classList.remove('hidden');
-      emojiBtn.setAttribute('aria-expanded', 'true');
-    }
-
-    function closeEmojiFlyout() {
-      emojiFlyout?.classList.add('hidden');
-      emojiBtn?.setAttribute('aria-expanded', 'false');
-    }
-
-    emojiBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (emojiFlyout.classList.contains('hidden')) openEmojiFlyout();
-      else closeEmojiFlyout();
-    });
-
-    document.addEventListener('click', (e) => {
-      if (!emojiFlyout || emojiFlyout.classList.contains('hidden')) return;
-      if (e.target === emojiBtn || emojiFlyout.contains(e.target)) return;
-      closeEmojiFlyout();
-    });
+    wireEmojiPicker(commentBodyInput);
 
     // Einmaliger, delegierter Listener statt eines neuen document-Listeners
     // pro Kommentar/Reaction-Picker (siehe buildReactionsRow) – verhindert,
@@ -3227,16 +3355,12 @@
       });
     });
 
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeEmojiFlyout();
-    });
-
     commentCancelBtn.addEventListener('click', () => {
       commentForm.classList.add('hidden');
       commentForm.reset();
       commentImageAttach.reset(null);
       commentErrorEl.classList.add('hidden');
-      closeEmojiFlyout();
+      closeAllEmojiFlyouts();
     });
 
     commentForm.addEventListener('submit', async (e) => {
@@ -3251,20 +3375,25 @@
       const body = commentBodyInput.value.trim();
       const image = commentImageAttach.getValue();
       if (!body && !image) {
-        commentErrorEl.textContent = 'Bitte Text eingeben oder ein Bild anhängen.';
+        commentErrorEl.textContent = 'Bitte Text eingeben oder ein Bild anhängen';
         commentErrorEl.classList.remove('hidden');
         return;
       }
-      const timecode_sec = item.provider === 'instagram' ? null : parseFloat(commentTimecodeInput.value);
+      const timecode_sec = item.provider === 'instagram' ? null : parseTimecode(commentTimecodeInput.value);
+      if (item.provider !== 'instagram' && (timecode_sec === null || Number.isNaN(timecode_sec))) {
+        commentErrorEl.textContent = 'Ungültiger Zeitpunkt – z. B. 90 oder 1:30';
+        commentErrorEl.classList.remove('hidden');
+        commentTimecodeInput.focus();
+        return;
+      }
       try {
         await createTopLevelComment(timecode_sec, body, image);
         commentForm.classList.add('hidden');
         commentForm.reset();
         commentImageAttach.reset(null);
-        closeEmojiFlyout();
+        closeAllEmojiFlyouts();
       } catch (err) {
-        commentErrorEl.textContent = err.message;
-        commentErrorEl.classList.remove('hidden');
+        alert('Kommentar konnte nicht gesendet werden: ' + err.message);
       }
     });
 
@@ -3396,7 +3525,7 @@
 
     function itemLabel(itemId) {
       const item = playlist.find((it) => it.id === itemId);
-      return item ? item.title : '(gelöschtes Item)';
+      return item ? item.title : '(gelöschtes Element)';
     }
 
     async function submitMixReply(parentId, body, formEl, image) {
@@ -3512,7 +3641,7 @@
           if (idx !== -1) comment.reactions.splice(idx, 1);
         }
         refreshReactionsUI(comment);
-        alert('Reaction konnte nicht gesetzt werden: ' + err.message);
+        alert('Reaktion konnte nicht gesetzt werden: ' + err.message);
       }
     }
 
@@ -3547,7 +3676,8 @@
       const addBtn = document.createElement('button');
       addBtn.type = 'button';
       addBtn.className = 'reaction-add-btn';
-      addBtn.title = 'Reaction hinzufügen';
+      addBtn.title = 'Reaktion hinzufügen';
+      addBtn.setAttribute('aria-label', 'Reaktion hinzufügen');
       addBtn.textContent = '😊+';
       const picker = document.createElement('div');
       picker.className = 'reaction-picker hidden';
@@ -3583,7 +3713,11 @@
     }
 
     async function deleteMixComment(id) {
-      if (!confirm('Diesen Kommentar wirklich löschen?')) return;
+      const hasReplies = comments.some((c) => c.parent_id === id);
+      const question = hasReplies
+        ? 'Diesen Kommentar samt Antworten wirklich löschen?'
+        : 'Diesen Kommentar wirklich löschen?';
+      if (!confirm(question)) return;
       // Antworten hängen serverseitig per ON DELETE CASCADE am Elternkommentar
       // (siehe server.js) – beim optimistischen Entfernen daher genauso
       // mitnehmen, damit der Client-Stand konsistent bleibt.
@@ -3625,6 +3759,7 @@
       wirePasteImage(textarea, imageAttach);
       submitOnCtrlEnter(textarea, form);
       wireMentionAutocomplete(textarea, () => playlist);
+      wireEmojiPicker(textarea);
 
       function openEdit() {
         textarea.value = getBody();
@@ -3723,11 +3858,14 @@
         <div class="comment-body">${linkifyWithPlaylistRefs(escapeHtml(c.body), playlist)}</div>
         ${c.image ? '<div class="comment-image-wrap"><img class="comment-image" alt="Bild im Kommentar"></div>' : ''}
         <div class="replies"></div>
-        <button type="button" class="link-btn reply-toggle">Antworten</button>
+        <button type="button" class="link-btn reply-toggle">antworten</button>
         <form class="reply-form hidden">
           <textarea class="reply-body" maxlength="2000" rows="2" placeholder="Antwort …"></textarea>
           <div class="reply-image-attach"></div>
-          <button type="submit">Senden</button>
+          <div class="form-actions">
+            <button type="submit">Senden</button>
+            <button type="button" class="secondary reply-cancel-btn">Abbrechen</button>
+          </div>
         </form>
       `;
       if (c.image) {
@@ -3747,10 +3885,10 @@
         c.timecode_sec == null
           ? showItemLabel
             ? itemLabel(c.item_id)
-            : '💬'
+            : '▶ abspielen'
           : showItemLabel
-          ? `${itemLabel(c.item_id)} · ${formatPos(c.timecode_sec)}`
-          : formatPos(c.timecode_sec);
+          ? `${itemLabel(c.item_id)} · ${formatTime(c.timecode_sec)}`
+          : formatTime(c.timecode_sec);
       item.querySelector('.timecode-link').addEventListener('click', () => {
         const idx = playlist.findIndex((it) => it.id === c.item_id);
         if (idx === -1) return;
@@ -3778,6 +3916,13 @@
       wirePasteImage(replyForm.querySelector('.reply-body'), replyImageAttach);
       submitOnCtrlEnter(replyForm.querySelector('.reply-body'), replyForm);
       wireMentionAutocomplete(replyForm.querySelector('.reply-body'), () => playlist);
+      wireEmojiPicker(replyForm.querySelector('.reply-body'));
+      replyForm.querySelector('.reply-cancel-btn').addEventListener('click', () => {
+        replyForm.reset();
+        replyImageAttach.reset(null);
+        replyForm.classList.add('hidden');
+        closeAllEmojiFlyouts();
+      });
 
       replyToggle.addEventListener('click', () => {
         if (!authorName) {
@@ -3853,7 +3998,9 @@
         if (!groups.has(c.item_id)) groups.set(c.item_id, []);
         groups.get(c.item_id).push(c);
       });
-      const orderedItemIds = playlist.map((it) => it.id).filter((id) => groups.has(id));
+      const orderedItemIds = playlistDisplayOrder()
+        .map((idx) => playlist[idx].id)
+        .filter((id) => groups.has(id));
       Array.from(groups.keys()).forEach((id) => {
         if (!orderedItemIds.includes(id)) orderedItemIds.push(id);
       });
@@ -3876,7 +4023,7 @@
           header.disabled = !item;
           header.innerHTML = `<span class="comment-group-icon"></span><span class="comment-group-title"></span>`;
           header.querySelector('.comment-group-icon').textContent = item ? playlistItemIcon(item.provider) : '❔';
-          header.querySelector('.comment-group-title').textContent = item ? item.title : '(gelöschtes Item)';
+          header.querySelector('.comment-group-title').textContent = item ? item.title : '(gelöschtes Element)';
           if (item) {
             header.addEventListener('click', () => {
               const idx = playlist.findIndex((it) => it.id === itemId);
@@ -3942,7 +4089,7 @@
           const providerIcons = (s.providers || []).map(playlistItemIcon).join(' ');
           row.innerHTML = `
             <span class="stream-list-title">${lock}${escapeHtml(s.title)}</span>
-            <span class="stream-list-meta">${providerIcons} · ${s.item_count} Item(s)</span>
+            <span class="stream-list-meta">${providerIcons ? `${providerIcons} · ` : ''}${s.item_count} ${s.item_count === 1 ? 'Element' : 'Elemente'}</span>
             <span class="stream-list-date">${formatDate(s.created_at)}</span>
           `;
           listEl.appendChild(row);
