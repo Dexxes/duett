@@ -2813,15 +2813,44 @@
 
     // ---------- YouTube-Engine ----------
 
-    function ensureYouTubePlayer() {
-      if (youtubePlayer) return Promise.resolve(youtubePlayer);
+    // YouTube-Bedienelemente (controls) lassen sich nur beim Erzeugen des
+    // Players festlegen. Im Overlay-Vollbild übernimmt die eigene Glass-Leiste
+    // die Steuerung, YouTubes eigenes Overlay (Titel, Steuerleiste) soll dort
+    // gar nicht erst erscheinen – deshalb wird der Player beim Wechsel in den
+    // bzw. aus dem Vollbild mit passendem controls-Wert neu erzeugt (siehe
+    // syncYouTubeControlsForFullscreen).
+    let youtubePlayerControls = 1;
+
+    function desiredYouTubeControls() {
+      return getFullscreenElement() === playerWrap ? 0 : 1;
+    }
+
+    function ensureYouTubePlayer(controls = desiredYouTubeControls()) {
+      if (youtubePlayer && youtubePlayerControls === controls) return Promise.resolve(youtubePlayer);
+      if (youtubePlayer) {
+        try {
+          youtubePlayer.destroy();
+        } catch {
+          // ignore
+        }
+        youtubePlayer = null;
+        youtubePlayerReady = false;
+      }
+      // destroy() entfernt das iframe; für den neuen Player ein frisches
+      // Zielelement anlegen.
+      if (!document.getElementById('youtube-embed-target')) {
+        const target = document.createElement('div');
+        target.id = 'youtube-embed-target';
+        youtubeEmbedEl.replaceChildren(target);
+      }
+      youtubePlayerControls = controls;
       return loadYouTubeIframeApi().then(
         (YT) =>
           new Promise((resolve) => {
             youtubePlayer = new YT.Player('youtube-embed-target', {
               height: '100%',
               width: '100%',
-              playerVars: { playsinline: 1, fs: 0 },
+              playerVars: { playsinline: 1, fs: 0, controls },
               events: {
                 onReady: () => {
                   youtubePlayerReady = true;
@@ -3261,8 +3290,26 @@
       }
     }
 
+    // Beim Wechsel in den/aus dem Vollbild den YouTube-Player mit passendem
+    // controls-Wert neu laden (Position und Play-Zustand bleiben erhalten),
+    // siehe ensureYouTubePlayer.
+    function syncYouTubeControlsForFullscreen() {
+      if (!youtubeIsActive() || !youtubePlayer) return;
+      if (youtubePlayerControls === desiredYouTubeControls()) return;
+      let pos = currentPositionSec || 0;
+      try {
+        pos = youtubePlayer.getCurrentTime() || pos;
+      } catch {
+        // ignore
+      }
+      loadYouTubeItem(playlist[currentIndex], pos, isPlaying);
+    }
+
     ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange'].forEach((evt) =>
-      document.addEventListener(evt, updateFsOverlay)
+      document.addEventListener(evt, () => {
+        updateFsOverlay();
+        syncYouTubeControlsForFullscreen();
+      })
     );
 
     if (playerControlsEl && typeof ResizeObserver === 'function') {

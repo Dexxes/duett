@@ -2758,8 +2758,10 @@ button[data-testid="play-pause-button"] {
 .player-wrap.fs-overlay .fullscreen-comment-bar { order: 11; }
 .player-wrap.fs-overlay .mix-pos-display { order: 12; }
 
-/* Pfeilband-Segmente: gleiche Glass-Fläche, aber ohne Rahmen/Schatten
-   (clip-path würde sie ohnehin abschneiden) und nur 2px Abstand. */
+/* Pfeilband-Segmente: gleiche Glass-Fläche und gleicher heller Rahmen wie
+   die übrigen Glass-Buttons (z. B. "Senden"), nur 2px Abstand. Die beiden
+   Pfeilspitzen (clip-path) bekommen ihren Rahmen weiter unten per SVG, weil
+   clip-path einen normalen border an den Schrägen abschneiden würde. */
 .player-wrap.fs-overlay #prev-item-btn,
 .player-wrap.fs-overlay #next-item-btn,
 .player-wrap.fs-overlay .seek-buttons [data-seek] {
@@ -2776,7 +2778,7 @@ button[data-testid="play-pause-button"] {
   font-weight: 500;
   color: #fff;
   background: rgba(255, 255, 255, 0.12);
-  border: 0;
+  border: 1px solid var(--glass-border);
   border-radius: 0;
   box-shadow: none;
   -webkit-backdrop-filter: var(--glass-blur);
@@ -2787,6 +2789,7 @@ button[data-testid="play-pause-button"] {
 .player-wrap.fs-overlay #next-item-btn:hover:not(:disabled),
 .player-wrap.fs-overlay .seek-buttons [data-seek]:hover {
   background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
 }
 
 .player-wrap.fs-overlay #prev-item-btn:disabled,
@@ -2804,17 +2807,28 @@ button[data-testid="play-pause-button"] {
   margin-left: -4px;
 }
 
-/* Pfeilspitzen */
+/* Pfeilspitzen. Rahmen: SVG-Kontur mit 2px Strichstärke, von clip-path auf
+   die innere Hälfte (1px) beschnitten – entspricht optisch dem border der
+   übrigen Segmente. Maße der SVGs = Buttongröße (60×42, mobil 42×38). */
+.player-wrap.fs-overlay #prev-item-btn,
+.player-wrap.fs-overlay #next-item-btn {
+  border: 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
 .player-wrap.fs-overlay #prev-item-btn {
   width: 60px;
   padding-left: 12px;
   clip-path: polygon(22px 0, 100% 0, 100% 100%, 22px 100%, 0 50%);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 42'%3E%3Cpath d='M22 0H60V42H22L0 21Z' fill='none' stroke='white' stroke-opacity='0.18' stroke-width='2'/%3E%3C/svg%3E");
 }
 
 .player-wrap.fs-overlay #next-item-btn {
   width: 60px;
   padding-right: 12px;
   clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 50%, calc(100% - 22px) 100%, 0 100%);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 42'%3E%3Cpath d='M0 0H38L60 21L38 42H0Z' fill='none' stroke='white' stroke-opacity='0.18' stroke-width='2'/%3E%3C/svg%3E");
 }
 
 /* Abgerundete Enden am Play-Button */
@@ -2876,11 +2890,13 @@ button[data-testid="play-pause-button"] {
   .player-wrap.fs-overlay #prev-item-btn {
     padding-left: 10px;
     clip-path: polygon(16px 0, 100% 0, 100% 100%, 16px 100%, 0 50%);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 42 38'%3E%3Cpath d='M16 0H42V38H16L0 19Z' fill='none' stroke='white' stroke-opacity='0.18' stroke-width='2'/%3E%3C/svg%3E");
   }
 
   .player-wrap.fs-overlay #next-item-btn {
     padding-right: 10px;
     clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 0 100%);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 42 38'%3E%3Cpath d='M0 0H26L42 19L26 38H0Z' fill='none' stroke='white' stroke-opacity='0.18' stroke-width='2'/%3E%3C/svg%3E");
   }
 
   .player-wrap.fs-overlay #play-pause-btn {
@@ -2905,4 +2921,35 @@ button[data-testid="play-pause-button"] {
     width: 38px;
     height: 38px;
   }
+}
+
+/* ---------- Sprechblasen im Vollbild: Glass-Optik in User-Farbe ---------- */
+/* Halbtransparente, weichgezeichnete Fläche, eingefärbt in der Farbe des
+   Kommentators (--bubble-color, gesetzt in app.js). Ohne backdrop-filter-
+   Support eine dunklere, deckendere Variante für die Lesbarkeit. */
+.comment-bubble {
+  background: color-mix(in srgb, var(--bubble-color, var(--accent)) 26%, rgba(15, 17, 21, 0.35));
+  border: 1px solid color-mix(in srgb, var(--bubble-color, var(--accent)) 55%, transparent);
+  border-left: 4px solid var(--bubble-color, var(--accent));
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .comment-bubble {
+    background: color-mix(in srgb, var(--bubble-color, var(--accent)) 30%, rgba(15, 17, 21, 0.85));
+  }
+}
+
+/* Autorname auf der eingefärbten Fläche: aufgehellte User-Farbe statt der
+   reinen (inline gesetzten) Farbe, sonst verschwindet er im eigenen Ton. */
+.comment-bubble .comment-bubble-author {
+  color: color-mix(in srgb, var(--bubble-color, var(--accent)) 35%, #fff) !important;
+}
+
+.comment-bubble .comment-bubble-reply-btn {
+  color: rgba(255, 255, 255, 0.8);
 }
