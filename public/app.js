@@ -1918,6 +1918,13 @@
     let currentDurationSec = 0;
     let currentPlaybackRate = 1;
     let isPlaying = false;
+    // Hat das aktuell geladene Item seit dem Laden (bzw. seit dem letzten
+    // "Ende") tatsächlich gespielt? Ein Ende-Event zählt nur dann. Schützt
+    // vor verspäteten/veralteten Ende-Events – z. B. wenn der Tab im
+    // Hintergrund war und der Browser die gestauten Player-Events erst beim
+    // Zurückkehren ausliefert: Die gehören dann noch zum vorherigen Item und
+    // würden sonst den gerade laufenden Song überspringen.
+    let currentItemHasPlayed = false;
     let lastCheckedPos = -0.001;
     let lastMarkerDuration = -1;
     // Timecode des Kommentars, zu dem der "Nächster Kommentar"-Button zuletzt
@@ -2721,6 +2728,7 @@
     video.addEventListener('play', () => {
       if (!ardIsActive()) return;
       isPlaying = true;
+      currentItemHasPlayed = true;
       updatePlayPauseIcon();
     });
     video.addEventListener('pause', () => {
@@ -2761,10 +2769,14 @@
               controller.addListener('playback_update', (e) => {
                 spotifyHasLoadedTrack = true;
                 if (!spotifyIsActive()) return;
+                // Updates, die noch zum vorher geladenen Track gehören, ignorieren.
+                const playingUri = e.data.playingURI;
+                if (playingUri && playingUri !== playlist[currentIndex]?.provider_uri) return;
                 noteSpotifyPlaybackDuration(e.data.duration, playlist[currentIndex]);
                 currentPositionSec = (e.data.position || 0) / 1000;
                 currentDurationSec = (e.data.duration || 0) / 1000;
                 isPlaying = !e.data.isPaused;
+                if (isPlaying) currentItemHasPlayed = true;
                 updatePosDisplay();
                 updatePlayPauseIcon();
                 checkCommentTriggers();
@@ -2828,14 +2840,30 @@
                   resolve(youtubePlayer);
                 },
                 onStateChange: (e) => {
-                  if (e.data === YT.PlayerState.ENDED) handleItemEnded();
+                  // Der YouTube-Player bleibt versteckt bestehen, wenn ein
+                  // anderer Provider läuft – seine Events dann ignorieren.
+                  if (!youtubeIsActive() || !youtubeShowsCurrentItem()) return;
+                  if (e.data === YT.PlayerState.ENDED) {
+                    handleItemEnded();
+                    return;
+                  }
                   isPlaying = e.data === YT.PlayerState.PLAYING;
+                  if (isPlaying) currentItemHasPlayed = true;
                   updatePlayPauseIcon();
                 },
               },
             });
           })
       );
+    }
+
+    function youtubeShowsCurrentItem() {
+      try {
+        const videoId = youtubePlayer?.getVideoData?.()?.video_id;
+        return !videoId || videoId === playlist[currentIndex]?.provider_uri;
+      } catch {
+        return true;
+      }
     }
 
     function stopYouTubePositionPolling() {
@@ -2914,10 +2942,12 @@
           if (tiktokPendingAutoplay) postToTikTok('play');
           break;
         case 'onStateChange':
+          if (!tiktokIsActive()) break;
           if (data.value === 0) {
             handleItemEnded();
           } else {
             isPlaying = data.value === 1;
+            if (isPlaying) currentItemHasPlayed = true;
             updatePlayPauseIcon();
           }
           break;
@@ -2999,6 +3029,7 @@
       if (index < 0 || index >= playlist.length) return;
       const previousItem = playlist[currentIndex];
       currentIndex = index;
+      currentItemHasPlayed = false;
       const item = playlist[index];
       if (previousItem && previousItem.provider !== item.provider) {
         stopPlaybackForProvider(previousItem.provider);
@@ -3031,6 +3062,11 @@
     }
 
     function handleItemEnded() {
+      // Nur weiterschalten, wenn das aktuelle Item wirklich gespielt hat –
+      // sonst ist das Ende-Event veraltet (siehe currentItemHasPlayed). Ein
+      // Ende pro Abspielvorgang: erneutes Abspielen setzt das Flag wieder.
+      if (!currentItemHasPlayed) return;
+      currentItemHasPlayed = false;
       const nextIndex = neighborIndex(1);
       if (nextIndex !== -1) {
         loadItemIntoPlayer(nextIndex, true);
