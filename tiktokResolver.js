@@ -135,10 +135,25 @@ async function resolveTikTok(input) {
     throw new Error('Konnte keine TikTok-Video-ID ermitteln');
   }
 
+  // Link zum Original (für das verlinkte Anbieter-Icon in der Playlist):
+  // die aufgelöste Video-URL ohne Tracking-Parameter.
+  let sourceUrl = null;
+  try {
+    const u = new URL(canonicalUrl);
+    if (VIDEO_ID_RE.test(u.pathname)) {
+      u.search = '';
+      u.hash = '';
+      sourceUrl = u.toString();
+    }
+  } catch {
+    // ignore
+  }
+
   return [
     {
       provider: 'tiktok',
       provider_uri: videoId,
+      source_url: sourceUrl,
       title: data.title || 'TikTok-Video',
       artist_or_channel: data.author_name || (data.author_unique_id ? `@${data.author_unique_id}` : ''),
       // oEmbed liefert keine Videolänge – Dauer bleibt unbekannt, bis der
