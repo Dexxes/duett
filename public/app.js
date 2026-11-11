@@ -3451,7 +3451,7 @@
     }
 
     function scrollAndHighlightComment(c) {
-      const el = commentList.querySelector(`.comment[data-id="${c.id}"], .reply[data-id="${c.id}"]`);
+      const el = commentList.querySelector(`.comment[data-id="${c.id}"]`);
       if (!el) return;
       const replyForm = el.querySelector(':scope > .reply-form');
       const editForm = el.querySelector(':scope > .edit-form');
@@ -3460,38 +3460,8 @@
       if (busy) return;
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.style.setProperty('--highlight-color', resolveAuthorColor(c));
-      // Erneutes Hervorheben (z. B. zweimal kurz hintereinander auf denselben
-      // Playlist-Eintrag geklickt) startet die 6 s neu, statt dass der alte
-      // Timer die neue Hervorhebung vorzeitig entfernt.
-      clearTimeout(el._highlightTimer);
       el.classList.add('timecode-highlight');
-      el._highlightTimer = setTimeout(() => el.classList.remove('timecode-highlight'), 6000);
-    }
-
-    // Kommentar (oder Antwort), in dem ein Playlist-Eintrag per Medien-Link
-    // verlinkt ist – also in der Regel der, über den er in die Playlist kam
-    // (siehe ensureLinkAddedToPlaylist). Gibt es mehrere, gewinnt der
-    // älteste. Nur echte URLs zählen, keine @-Mentions des Titels.
-    function findCommentLinkingItem(item) {
-      if (!item) return null;
-      let best = null;
-      for (const c of comments) {
-        if (c.pending || !c.body) continue;
-        if (best && c.created_at >= best.created_at) continue;
-        const links = findMediaLinksInText(c.body);
-        if (links.some((link) => findPlaylistItemForLink(link, [item]))) best = c;
-      }
-      return best;
-    }
-
-    // Beim expliziten Abspielen aus der Playlist (Klick auf den Eintrag) zum
-    // verlinkenden Kommentar springen. Bewusst nicht in loadItemIntoPlayer,
-    // damit automatisches Weiterspielen, Vor/Zurück usw. die Seite nicht
-    // herumscrollen. Im Vollbild ist die Kommentarliste nicht sichtbar.
-    function revealCommentLinkingItem(item) {
-      if (getFullscreenElement()) return;
-      const c = findCommentLinkingItem(item);
-      if (c) scrollAndHighlightComment(c);
+      setTimeout(() => el.classList.remove('timecode-highlight'), 6000);
     }
 
     // ---------- Marker-Leiste ----------
@@ -3655,7 +3625,6 @@
         row.addEventListener('click', (e) => {
           if (e.target.closest('.playlist-item-remove') || e.target.closest('.playlist-item-provider-link')) return;
           loadItemIntoPlayer(index, true);
-          revealCommentLinkingItem(item);
         });
         row.querySelector('.playlist-item-remove')?.addEventListener('click', async (e) => {
           e.stopPropagation();
