@@ -693,12 +693,20 @@
     heading.textContent =
       provider === 'instagram' ? 'Titel für den Instagram-Post' : 'Titel für das TikTok-Video';
     input.value = initialValue || '';
+    // Im Vollbild (z. B. Link im Vollbild-Kommentarfeld) wäre das Modal
+    // außerhalb des Vollbild-Elements unsichtbar – solange es offen ist,
+    // deshalb dorthin umhängen und danach wieder zurück.
+    const homeParent = modal.parentNode;
+    const homeNext = modal.nextSibling;
+    const fsEl = getFullscreenElement();
+    if (fsEl && !fsEl.contains(modal)) fsEl.appendChild(modal);
     modal.classList.remove('hidden');
     setTimeout(() => input.focus(), 0);
 
     return new Promise((resolve) => {
       function finish(result) {
         modal.classList.add('hidden');
+        if (modal.parentNode !== homeParent) homeParent.insertBefore(modal, homeNext);
         form.removeEventListener('submit', onSubmit);
         cancelBtn.removeEventListener('click', onCancel);
         modal.removeEventListener('click', onOverlayClick);
@@ -765,13 +773,21 @@
   }
 
   // Link zum Original eines Playlist-Eintrags (für das Anbieter-Icon in der
-  // Playlist), oder null, wenn keiner bekannt ist (z. B. TikTok, roher
-  // m3u8-Link ohne Mediathek-Seite).
+  // Playlist), oder null, wenn keiner bekannt ist (z. B. roher m3u8-Link
+  // ohne Mediathek-Seite).
   function itemOpenLink(item) {
     if (!item) return null;
     if (item.provider === 'spotify') return { url: spotifyOpenUrl(item), label: 'In Spotify öffnen' };
     if (item.provider === 'youtube' && /^[a-zA-Z0-9_-]{11}$/.test(item.provider_uri || '')) {
       return { url: `https://www.youtube.com/watch?v=${item.provider_uri}`, label: 'Auf YouTube öffnen' };
+    }
+    if (item.provider === 'tiktok' && /^\d+$/.test(item.provider_uri || '')) {
+      // Ältere TikTok-Items haben noch keine source_url – dann über die
+      // Video-ID, die TikTok auf das Original weiterleitet.
+      const url = /^https:\/\/(www\.)?tiktok\.com\//i.test(item.source_url || '')
+        ? item.source_url
+        : `https://www.tiktok.com/@_/video/${item.provider_uri}`;
+      return { url, label: 'Auf TikTok öffnen' };
     }
     if (item.provider === 'instagram') {
       const m = /^(reel|p):([A-Za-z0-9_-]+)$/.exec(item.provider_uri || '');
@@ -1946,6 +1962,9 @@
     const tiktokEmbedEl = document.getElementById('tiktok-embed');
     const instagramEmbedEl = document.getElementById('instagram-embed');
     const nowPlayingThumb = document.getElementById('now-playing-thumb');
+    // Abgelaufenes Vorschaubild (z. B. TikTok-CDN-Link) ausblenden statt
+    // ein kaputtes Bild zu zeigen.
+    nowPlayingThumb?.addEventListener('error', () => nowPlayingThumb.classList.add('hidden'));
     const nowPlayingTitle = document.getElementById('now-playing-title');
     const nowPlayingArtist = document.getElementById('now-playing-artist');
     const playPauseBtn = document.getElementById('play-pause-btn');
@@ -3228,12 +3247,12 @@
       else requestPlayerFullscreen();
     });
 
-    // ---------- Vollbild ARD/Video + YouTube: schwebende Glass-Leiste ----------
-    // Bei ARD/Video- und YouTube-Items im Vollbild schwebt die Steuerleiste
+    // ---------- Vollbild ARD/Video, YouTube + TikTok: schwebende Glass-Leiste ----------
+    // Bei ARD/Video-, YouTube- und TikTok-Items im Vollbild schwebt die Steuerleiste
     // über dem Bild (.fs-overlay, siehe style.css). Die nativen Video-Controls
     // werden dann abgeschaltet, weil sie sonst mit der eigenen Leiste
-    // überlappen. Bei YouTube liegt stattdessen #fs-shield über dem iframe:
-    // Maus-Events im iframe kämen sonst nie bei uns an, und YouTubes eigene
+    // überlappen. Bei YouTube und TikTok liegt stattdessen #fs-shield über dem iframe:
+    // Maus-Events im iframe kämen sonst nie bei uns an, und die eigenen
     // Bedienelemente (die mit der Leiste kollidieren würden) bleiben so
     // während der Wiedergabe verborgen. Während
     // der Wiedergabe blendet sich die Leiste nach FS_CONTROLS_HIDE_MS ohne
@@ -3244,7 +3263,7 @@
     let fsHideTimer = null;
     let fsSuppressNextVideoClick = false;
     const fsShield = document.getElementById('fs-shield');
-    const FS_OVERLAY_PROVIDERS = ['ard', 'youtube'];
+    const FS_OVERLAY_PROVIDERS = ['ard', 'youtube', 'tiktok'];
 
     function fsOverlayActive() {
       return !!playerWrap && playerWrap.classList.contains('fs-overlay');
@@ -3553,7 +3572,7 @@
           ${
             item.thumbnail_url
               ? '<img class="playlist-item-thumb" alt="">'
-              : '<span class="playlist-item-thumb playlist-item-thumb-placeholder"></span>'
+              : '<span class="playlist-item-thumb playlist-item-thumb-placeholder playlist-item-thumb-icon"></span>'
           }
           <span class="playlist-item-meta">
             <span class="playlist-item-title"></span>
@@ -3565,7 +3584,24 @@
         // src per DOM-Property statt per HTML-String: thumbnail_url stammt bei
         // YouTube-Items vom Client und darf kein Markup einschleusen können.
         const thumbEl = row.querySelector('img.playlist-item-thumb');
-        if (thumbEl) thumbEl.src = item.thumbnail_url;
+        const thumbIconEl = row.querySelector('span.playlist-item-thumb-icon');
+        if (thumbIconEl) thumbIconEl.textContent = playlistItemIcon(item.provider);
+        if (thumbEl) {
+          // Vorschaubilder können ablaufen (TikToks CDN-Links sind signiert
+          // und nur einige Tage gültig) – dann statt eines kaputten Bilds das
+          // Anbieter-Icon als Platzhalter zeigen.
+          thumbEl.addEventListener(
+            'error',
+            () => {
+              const ph = document.createElement('span');
+              ph.className = 'playlist-item-thumb playlist-item-thumb-placeholder playlist-item-thumb-icon';
+              ph.textContent = playlistItemIcon(item.provider);
+              thumbEl.replaceWith(ph);
+            },
+            { once: true }
+          );
+          thumbEl.src = item.thumbnail_url;
+        }
         // Anbieter-Icon: verlinkt auf das Original, sofern eine Quell-URL
         // bekannt ist (per DOM-Property statt HTML-String gesetzt, da
         // source_url aus Nutzereingaben stammt).
@@ -3689,6 +3725,15 @@
       let added = false;
       for (const link of links) {
         if (findPlaylistItemForLink(link, playlist)) continue;
+        // TikTok/Instagram: wie beim Hinzufügen über das Playlist-Feld nach
+        // einem eigenen Titel fragen. Abbrechen heißt hier: Link bleibt im
+        // Kommentar stehen, landet aber nicht in der Playlist.
+        let customTitle = '';
+        if (link.provider === 'tiktok' || link.provider === 'instagram') {
+          const result = await askItemTitle(link.provider, '');
+          if (result.cancelled) continue;
+          customTitle = result.title;
+        }
         try {
           let payload;
           if (link.provider === 'youtube') {
@@ -3696,6 +3741,7 @@
             payload = { items };
           } else {
             payload = { url: link.url };
+            if (customTitle) payload.custom_title = customTitle;
           }
           await apiFetch(`api/streams/${streamId}/items`, {
             method: 'POST',

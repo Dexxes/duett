@@ -1758,6 +1758,13 @@ video {
   display: block;
 }
 
+.playlist-item-thumb-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
 .playlist-item-meta {
   min-width: 0;
   flex: 1;
@@ -2499,10 +2506,10 @@ button[data-testid="play-pause-button"] {
 /* Vollbild ARD/Video + YouTube: schwebende Glass-Steuerleiste */
 /* ========================================================= */
 /* .fs-overlay setzt app.js (updateFsOverlay) auf .player-wrap, solange der
-   Player im Vollbild ist UND ein ARD/Video- oder YouTube-Item läuft. Eine
-   Klasse statt :fullscreen-Pseudoklassen erspart die dreifachen
-   Vendor-Regeln und lässt die übrigen iframe-Provider (Spotify/TikTok/
-   Instagram) bewusst außen vor – deren eigene Bedienelemente würden sonst
+   Player im Vollbild ist UND ein ARD/Video-, YouTube- oder TikTok-Item läuft.
+   Eine Klasse statt :fullscreen-Pseudoklassen erspart die dreifachen
+   Vendor-Regeln und lässt die übrigen iframe-Provider (Spotify/Instagram)
+   bewusst außen vor – deren eigene Bedienelemente würden sonst
    von der Leiste verdeckt.
    .fs-controls-hidden kommt dazu, wenn die Leiste nach Inaktivität
    ausgeblendet ist. --fs-controls-h (Höhe der Leiste) misst app.js, damit
@@ -2539,13 +2546,30 @@ button[data-testid="play-pause-button"] {
   border-radius: 0;
 }
 
-/* YouTube: transparente Fläche über dem iframe, siehe #fs-shield in
+/* TikTok: Hochkant-Player auf volle Bildschirmhöhe skaliert (Breite folgt
+   aus 9:16), mittig auf schwarzem Grund. */
+.player-wrap.fs-overlay #tiktok-embed {
+  height: 100%;
+  margin: 0;
+  align-items: stretch;
+}
+
+.player-wrap.fs-overlay #tiktok-embed iframe {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  max-height: none;
+  border-radius: 0;
+}
+
+/* YouTube/TikTok: transparente Fläche über dem iframe, siehe #fs-shield in
    session.html und app.js. Liegt unter Sprechblasen (10) und Leiste (15). */
 .fs-shield {
   display: none;
 }
 
-.player-wrap.fs-overlay[data-provider="youtube"] .fs-shield {
+.player-wrap.fs-overlay[data-provider="youtube"] .fs-shield,
+.player-wrap.fs-overlay[data-provider="tiktok"] .fs-shield {
   display: block;
   position: absolute;
   inset: 0;
